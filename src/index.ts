@@ -69,14 +69,13 @@ interface PlayerResponse {
   };
 }
 
-// InnerTube client profiles. Listed in fallback order — IOS first because
-// Apple app review constraints prevent YouTube from requiring PO tokens or
-// browser attestation on mobile native clients, making it the most reliable
-// path for caption extraction (this is also what yt-dlp prefers).
+// InnerTube client profiles, tried in order until one returns playable data
+// with caption tracks. TV is first because it has the loosest enforcement
+// (TV vendors can't auto-update, so YouTube doesn't impose hard version
+// gates on it). Mobile native clients come next for richer data when accepted.
 //
-// When YouTube tightens enforcement and one of these starts returning empty
-// captions or `UNPLAYABLE`, bump its clientVersion to a current value and
-// keep going. Track yt-dlp's `youtube.py` for known-good versions.
+// When CI's nightly canary starts failing, the typical fix is to bump
+// clientVersion strings to current values (track yt-dlp's recent commits).
 interface ClientProfile {
   name: string;
   clientName: string;
@@ -87,6 +86,33 @@ interface ClientProfile {
 }
 
 const CLIENT_PROFILES: ClientProfile[] = [
+  {
+    name: 'tv',
+    clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+    clientVersion: '2.0',
+    clientNameHeader: '85',
+    userAgent:
+      'Mozilla/5.0 (PlayStation 4 5.55) AppleWebKit/601.2 (KHTML, like Gecko)',
+    context: {
+      platform: 'TV',
+    },
+  },
+  {
+    name: 'android_vr',
+    clientName: 'ANDROID_VR',
+    clientVersion: '1.62.20',
+    clientNameHeader: '28',
+    userAgent:
+      'com.google.android.apps.youtube.vr.oculus/1.62.20 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip',
+    context: {
+      deviceMake: 'Oculus',
+      deviceModel: 'Quest 3',
+      platform: 'MOBILE',
+      osName: 'Android',
+      osVersion: '12L',
+      androidSdkVersion: 32,
+    },
+  },
   {
     name: 'ios',
     clientName: 'IOS',
@@ -113,17 +139,6 @@ const CLIENT_PROFILES: ClientProfile[] = [
       platform: 'MOBILE',
       osName: 'iOS',
       osVersion: '17.5.1',
-    },
-  },
-  {
-    name: 'tv',
-    clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-    clientVersion: '2.0',
-    clientNameHeader: '85',
-    userAgent:
-      'Mozilla/5.0 (PlayStation 4 5.55) AppleWebKit/601.2 (KHTML, like Gecko)',
-    context: {
-      platform: 'TV',
     },
   },
 ];
@@ -176,12 +191,18 @@ async function fetchPlayerWithClient(
   return (await response.json()) as PlayerResponse;
 }
 
-// Try clients in order until one returns a playable response with captions.
-// Returns the first response that has captionTracks; otherwise the last
-// playable response (so the caller can still get title/description).
+// Try every client in order. Return the first response that has captionTracks;
+// fall back to the first OK response (so getVideoDetails still gets title/desc);
+// throw a combined error only if every client fails.
+//
+// We do NOT bail early on individual error statuses. YouTube uses the same
+// `ERROR` status for both "video is private/deleted" *and* "this client
+// version is too old" — and different clients see different states for the
+// same video. Trying them all is cheap and the only reliable signal that a
+// video is truly inaccessible is when no client returns OK.
 async function fetchPlayer(videoID: string): Promise<PlayerResponse> {
-  let lastPlayable: PlayerResponse | null = null;
-  let lastError: Error | null = null;
+  let firstPlayable: PlayerResponse | null = null;
+  const failures: string[] = [];
 
   for (const client of CLIENT_PROFILES) {
     try {
@@ -190,38 +211,31 @@ async function fetchPlayer(videoID: string): Promise<PlayerResponse> {
       debug(`${client.name} client returned playabilityStatus=${status}`);
 
       if (status && status !== 'OK') {
-        // Surface real errors (LOGIN_REQUIRED, AGE_VERIFICATION_REQUIRED,
-        // ERROR for private/deleted videos). Don't keep retrying for these.
-        if (
-          status === 'LOGIN_REQUIRED' ||
-          status === 'ERROR' ||
-          status === 'AGE_VERIFICATION_REQUIRED'
-        ) {
-          throw new Error(
-            `Video not playable: ${status}${
-              data.playabilityStatus?.reason
-                ? ` - ${data.playabilityStatus.reason}`
-                : ''
-            }`
-          );
-        }
-        // UNPLAYABLE / soft errors → try the next client
+        const reason = data.playabilityStatus?.reason;
+        failures.push(
+          `${client.name}: ${status}${reason ? ` - ${reason}` : ''}`
+        );
         continue;
       }
 
-      lastPlayable = data;
-      const tracks = data.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      if (!firstPlayable) firstPlayable = data;
+      const tracks =
+        data.captions?.playerCaptionsTracklistRenderer?.captionTracks;
       if (tracks && tracks.length > 0) {
         return data;
       }
+      failures.push(`${client.name}: OK but no caption tracks`);
     } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      debug(`${client.name} client error: ${lastError.message}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      failures.push(`${client.name}: ${msg}`);
+      debug(`${client.name} client error: ${msg}`);
     }
   }
 
-  if (lastPlayable) return lastPlayable;
-  throw lastError ?? new Error('All InnerTube clients failed');
+  if (firstPlayable) return firstPlayable;
+  throw new Error(
+    `Video not playable on any client. Attempts:\n${failures.join('\n')}`
+  );
 }
 
 function pickCaptionTrack(
