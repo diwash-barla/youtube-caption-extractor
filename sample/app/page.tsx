@@ -4,6 +4,19 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 type Subtitle = { start: string; dur: string; text: string };
 type VideoDetails = { title?: string; description?: string };
+type ErrorState = { message: string; code?: string };
+
+async function readApiError(res: Response): Promise<ErrorState> {
+  try {
+    const body = await res.json();
+    return {
+      message: body.message ?? body.error ?? `HTTP ${res.status}`,
+      code: body.code,
+    };
+  } catch {
+    return { message: `HTTP ${res.status}` };
+  }
+}
 
 const YOUTUBE_ID_REGEX =
   /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/;
@@ -81,7 +94,7 @@ export default function HomePage() {
   const [subtitles, setSubtitles] = useState<Subtitle[]>([]);
   const [videoDetails, setVideoDetails] = useState<VideoDetails>({});
   const [videoId, setVideoId] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorState | null>(null);
   const [isFetching, setIsFetching] = useState(false);
   const [query, setQuery] = useState('');
   const [copied, setCopied] = useState(false);
@@ -127,7 +140,9 @@ export default function HomePage() {
     const raw = overrideInput ?? input;
     const id = extractVideoId(raw);
     if (!id || id.length !== 11) {
-      setError('That doesn’t look like a YouTube URL or video ID.');
+      setError({
+        message: 'That doesn’t look like a YouTube URL or video ID.',
+      });
       return;
     }
     if (overrideInput) setInput(overrideInput);
@@ -139,9 +154,18 @@ export default function HomePage() {
         fetch(`/api/subtitles?videoID=${id}&lang=${lang}`),
         fetch(`/api/videoDetails?videoID=${id}&lang=${lang}`),
       ]);
-      if (!subsRes.ok) throw new Error(`Subtitles API: HTTP ${subsRes.status}`);
-      if (!detailsRes.ok)
-        throw new Error(`Details API: HTTP ${detailsRes.status}`);
+      if (!subsRes.ok) {
+        setError(await readApiError(subsRes));
+        setSubtitles([]);
+        setVideoDetails({});
+        return;
+      }
+      if (!detailsRes.ok) {
+        setError(await readApiError(detailsRes));
+        setSubtitles([]);
+        setVideoDetails({});
+        return;
+      }
       const subsData = await subsRes.json();
       const detailsData = await detailsRes.json();
       const subs: Subtitle[] = subsData.subtitles ?? [];
@@ -149,12 +173,14 @@ export default function HomePage() {
       setVideoDetails(detailsData.videoDetails ?? {});
       setVideoId(id);
       if (subs.length === 0) {
-        setError(
-          `No captions for ${LANGUAGES.find((l) => l[0] === lang)?.[1] ?? lang}. This video might not be subtitled in that language.`
-        );
+        setError({
+          message: `No captions for ${LANGUAGES.find((l) => l[0] === lang)?.[1] ?? lang}. This video might not be subtitled in that language.`,
+        });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError({
+        message: err instanceof Error ? err.message : 'Unknown error',
+      });
       setSubtitles([]);
       setVideoDetails({});
     } finally {
@@ -286,11 +312,40 @@ export default function HomePage() {
           </div>
         </form>
 
-        {/* Error */}
+        {/* Error / notice */}
         {error && (
-          <p className='mt-6 text-sm text-stone-600 border-l-2 border-stone-300 pl-3'>
-            {error}
-          </p>
+          error.code === 'youtube_blocked_datacenter_ip' ? (
+            <aside className='mt-8 rounded-md border border-amber-200 bg-amber-50/60 px-5 py-4'>
+              <div className='font-mono text-[10px] uppercase tracking-[0.22em] text-amber-700 mb-2'>
+                Live demo limitation
+              </div>
+              <p className='text-sm text-stone-700 leading-relaxed'>
+                {error.message}
+              </p>
+              <div className='mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs'>
+                <a
+                  href='https://github.com/devhims/youtube-caption-extractor#deployment-environments'
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='text-amber-800 hover:text-amber-900 underline decoration-amber-300 hover:decoration-amber-700 decoration-1 underline-offset-[3px] transition-colors'
+                >
+                  why this happens
+                </a>
+                <a
+                  href='https://github.com/devhims/youtube-caption-extractor'
+                  target='_blank'
+                  rel='noopener noreferrer'
+                  className='text-amber-800 hover:text-amber-900 underline decoration-amber-300 hover:decoration-amber-700 decoration-1 underline-offset-[3px] transition-colors'
+                >
+                  run locally
+                </a>
+              </div>
+            </aside>
+          ) : (
+            <p className='mt-6 text-sm text-stone-600 border-l-2 border-stone-300 pl-3'>
+              {error.message}
+            </p>
+          )
         )}
 
         {/* Loading */}

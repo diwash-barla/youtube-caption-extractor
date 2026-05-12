@@ -1,6 +1,6 @@
 import { getVideoDetails } from 'youtube-caption-extractor';
-import { NextResponse } from 'next/server';
-import { type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
+import { handleApiError } from '../_lib/handleError';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -8,16 +8,16 @@ export async function GET(request: NextRequest) {
   const lang = searchParams.get('lang') || 'en';
 
   if (!videoID) {
-    return NextResponse.json({ error: 'Missing videoID' }, { status: 400 });
+    return NextResponse.json(
+      { code: 'missing_video_id', message: 'Missing videoID' },
+      { status: 400 }
+    );
   }
 
   try {
     const videoDetails = await getVideoDetails({ videoID, lang });
     return NextResponse.json({ videoDetails }, { status: 200 });
   } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }
