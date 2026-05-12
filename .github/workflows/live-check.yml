@@ -1,0 +1,70 @@
+name: Live YouTube canary
+
+# Best-effort nightly probe against real YouTube. NOTE: YouTube blocks most
+# datacenter IPs (including GitHub Actions) with bot challenges, so this
+# job is *expected* to fail intermittently from CI. It exists to surface
+# the rare days when YouTube changes something AND the GHA IP range is
+# briefly unblocked — in which case we want to know.
+#
+# This workflow does NOT fail the build. It opens / comments on a tracking
+# issue if a run fails, so maintainers can investigate.
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # 06:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+
+      - name: Run live YouTube tests
+        id: live
+        env:
+          YOUTUBE_LIVE: '1'
+        run: npx vitest run --retry=2
+
+      - name: Open / update tracking issue on failure
+        if: failure() && steps.live.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Nightly YouTube canary failed"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          BODY=$(cat <<EOF
+          The nightly live-network check against YouTube failed.
+
+          **Most common cause:** YouTube's bot-detection blocked the GitHub
+          Actions runner IP (this happens routinely — datacenter IP ranges
+          are aggressively filtered). The library itself is likely fine for
+          end users on residential IPs.
+
+          **When to act:** if this issue keeps reopening for many days *and*
+          you can reproduce the failure locally on a residential connection,
+          then YouTube has likely changed something. The fix is to bump
+          \`clientVersion\` values in \`CLIENT_PROFILES\` in
+          [\`src/index.ts\`](../blob/main/src/index.ts) — track recent commits
+          to yt-dlp's youtube extractor for known-good versions.
+
+          **Failed run:** $RUN_URL
+          EOF
+          )
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --title "$TITLE" --body "$BODY"
+          fi

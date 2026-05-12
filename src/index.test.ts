@@ -6,9 +6,22 @@ import {
   VideoDetails,
 } from './index';
 
-// Real network calls — these tests hit YouTube's InnerTube API.
-// They will fail offline or when YouTube changes their client-version
-// requirements (in which case bump CLIENT_PROFILES in src/index.ts).
+// Surface-level sanity tests — always run, no network.
+describe('public API surface', () => {
+  test('exports the documented functions and types', () => {
+    expect(typeof getSubtitles).toBe('function');
+    expect(typeof getVideoDetails).toBe('function');
+  });
+});
+
+// Live-network integration tests. YouTube blocks most datacenter IP ranges
+// (including GitHub Actions, AWS, etc.) with a "Sign in to confirm you're
+// not a bot" challenge that no client version bypasses. So these tests are
+// gated behind YOUTUBE_LIVE=1 and only run by default in local development
+// (where the requester IP is residential).
+const liveTestsEnabled =
+  !process.env.CI || process.env.YOUTUBE_LIVE === '1';
+const describeLive = liveTestsEnabled ? describe : describe.skip;
 
 const TEST_VIDEOS = {
   // "I Stopped Building MCP Servers. Here's Why." — ASR English only
@@ -19,7 +32,7 @@ const TEST_VIDEOS = {
 
 const NETWORK_TIMEOUT = 20_000;
 
-describe('getSubtitles', () => {
+describeLive('getSubtitles (live)', () => {
   test(
     'extracts auto-generated English captions',
     async () => {
@@ -55,7 +68,7 @@ describe('getSubtitles', () => {
   );
 });
 
-describe('getVideoDetails', () => {
+describeLive('getVideoDetails (live)', () => {
   let videoDetails: VideoDetails;
 
   beforeAll(async () => {
