@@ -13,7 +13,7 @@
     "next": "^16.2.6",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "youtube-caption-extractor": "^1.10.0"
+    "youtube-caption-extractor": "^1.10.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.0",
