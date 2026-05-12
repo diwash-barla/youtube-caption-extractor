@@ -1,37 +1,19 @@
-# YouTube Caption Extractor
+# youtube-caption-extractor
 
-A lightweight package to scrape and parse captions (subtitles) from YouTube videos, supporting both user-submitted and auto-generated captions with language options. In addition, it can also retrieve the title and description of the YouTube video.
+A small, dependency-light library that extracts the transcript (and basic
+metadata) from any public YouTube video. Works with both manual captions and
+YouTube's auto-generated subtitles, in any language the video has tracks for.
 
-## What's new in v1.10.0
+```ts
+import { getSubtitles } from 'youtube-caption-extractor';
 
-- **🔧 Fixed empty subtitles**: Resolves a regression where `getSubtitles` would return an empty array for many videos. Caption extraction is reliable again.
-- **♻️ More resilient**: Added automatic retry across multiple extraction paths so the library degrades gracefully when one path is unavailable.
-- **📐 More accurate parsing**: Improved handling of multi-line captions and special characters.
-- **🔌 Custom `fetch` option**: `getSubtitles` and `getVideoDetails` now accept a `fetch` option, so you can route requests through a residential proxy when deploying to Vercel / AWS Lambda / Workers (YouTube blocks datacenter IPs — see [Deployment environments](#deployment-environments)).
-- **🪶 Slimmer install**: The published package is now ~85% smaller (4 files instead of 25).
-- **🆙 Node 18+**: `engines.node` bumped to `>=18.0.0`.
-- **📤 `Options` interface now exported**.
-
-## v1.9.0
-
-- **🎯 TypeScript Export Fix**: The `Subtitle` interface is now properly exported, allowing TypeScript users to import and use it for type annotations
-- **🔇 Universal Debug Logging**: Replaced console.log pollution with a lightweight, universal debug logger that works in all environments (Node.js, Cloudflare Workers, Edge Runtime)
-- **📦 Silent by Default**: Library now produces zero log output in production, making it ideal for MCP servers
-
-## What's new in v1.8.1
-
-- **Enhanced Serverless Support**: Robust serverless deployment compatibility with automatic environment detection
-- **Improved Data Extraction**: Multi-location search for video titles and descriptions with comprehensive fallback strategies
-- **Modern Transcript API**: Integration with YouTube's engagement panel transcript system for better subtitle extraction
-- **Bot Detection Bypass**: Advanced session management and header fingerprinting to avoid YouTube's anti-bot measures
-- **Dual Extraction Methods**: Automatic fallback between XML captions and JSON transcript APIs
-- **Better Error Handling**: Graceful degradation and detailed debugging for production troubleshooting
-
-## What's new in v1.4.2
-
-- TypeScript batteries included 🔋: The package is now shipped with TypeScript type definitions, making it easier to use in TypeScript projects.
-- Node.js and Edge runtime support: The package now supports both Node.js and Edge runtime environments, expanding its usability across different platforms.
-- Enhanced data extraction: The new `getVideoDetails` API can fetch not just the subtitles, but also the video's title and description.
+const subtitles = await getSubtitles({ videoID: 'dQw4w9WgXcQ', lang: 'en' });
+// → [
+//     { start: '3.84', dur: '4.16', text: 'We're no strangers to love' },
+//     { start: '8.00', dur: '5.84', text: 'You know the rules, and so do I' },
+//     ...
+//   ]
+```
 
 ## Installation
 
@@ -39,171 +21,142 @@ A lightweight package to scrape and parse captions (subtitles) from YouTube vide
 npm install youtube-caption-extractor
 ```
 
-## Usage
-
-In a server-side environment or Node.js
-
-```js
-import {
-  getSubtitles,
-  getVideoDetails,
-  Subtitle,
-} from 'youtube-caption-extractor';
-
-// Fetching Subtitles
-const fetchSubtitles = async (videoID, lang = 'en') => {
-  try {
-    const subtitles = await getSubtitles({ videoID, lang });
-    console.log(subtitles);
-  } catch (error) {
-    console.error('Error fetching subtitles:', error);
-  }
-};
-
-// Fetching Video Details
-const fetchVideoDetails = async (videoID, lang = 'en') => {
-  try {
-    const videoDetails = await getVideoDetails({ videoID, lang });
-    console.log(videoDetails);
-  } catch (error) {
-    console.error('Error fetching video details:', error);
-  }
-};
-
-const videoID = 'video_id_here';
-const lang = 'en'; // Optional, default is 'en' (English)
-
-fetchSubtitles(videoID, lang);
-fetchVideoDetails(videoID, lang);
-```
-
-### TypeScript Usage
-
-```typescript
-import {
-  getSubtitles,
-  getVideoDetails,
-  Subtitle,
-  VideoDetails,
-} from 'youtube-caption-extractor';
-
-const fetchSubtitles = async (
-  videoID: string,
-  lang = 'en'
-): Promise<Subtitle[]> => {
-  try {
-    const subtitles: Subtitle[] = await getSubtitles({ videoID, lang });
-    console.log(subtitles);
-    return subtitles;
-  } catch (error) {
-    console.error('Error fetching subtitles:', error);
-    return [];
-  }
-};
-
-const fetchVideoDetails = async (
-  videoID: string,
-  lang = 'en'
-): Promise<VideoDetails> => {
-  try {
-    const details: VideoDetails = await getVideoDetails({ videoID, lang });
-    console.log(details);
-    return details;
-  } catch (error) {
-    console.error('Error fetching video details:', error);
-    throw error;
-  }
-};
-```
-
-### Debug Logging
-
-The library includes a lightweight, universal debug logger that works in all environments (Node.js, Cloudflare Workers, Edge Runtime, etc.). By default, it's silent in production.
-
-```bash
-# Enable debug logging
-DEBUG=youtube-caption-extractor node your-script.js
-
-# Or using npm scripts
-npm run test:debug
-
-# Works in edge environments too
-DEBUG=youtube-caption-extractor wrangler dev
-```
-
-**Edge Runtime Compatibility**: Unlike many logging libraries, our universal logger has zero Node.js dependencies and works seamlessly in Cloudflare Workers, Vercel Edge Functions, and other edge computing environments.
+Requires **Node.js ≥ 18** (uses the global `fetch` API). Works in Node.js,
+Bun, Deno, Cloudflare Workers, and any other modern JavaScript runtime that
+provides `fetch` — see [Deployment environments](#deployment-environments)
+for important notes about which runtimes YouTube will actually allow.
 
 ## API
 
-### getSubtitles({ videoID, lang, fetch })
+The library exports two functions and three types.
 
-- `videoID` (string) - The YouTube video ID
-- `lang` (string) - Optional, the language code for the subtitles (e.g., 'en', 'fr', 'de'). Default is 'en' (English)
-- `fetch` (typeof fetch) - Optional, a custom fetch implementation. Use this to route requests through a residential proxy when deploying to environments where YouTube blocks datacenter IPs (Vercel, AWS Lambda, Cloudflare Workers). See [Deployment environments](#deployment-environments) for details.
+### `getSubtitles({ videoID, lang?, fetch? })`
 
-Returns a promise that resolves to an array of subtitle objects with the following properties:
+Returns the caption track as an array of timed segments.
 
-- `start` (string) - The start time of the caption in seconds
-- `dur` (string) - The duration of the caption in seconds
-- `text` (string) - The text content of the caption
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `videoID` | `string` | (required) | The 11-character YouTube video ID, e.g. `dQw4w9WgXcQ`. Not the full URL. |
+| `lang` | `string` | `'en'` | ISO language code (`'en'`, `'es'`, `'fr'`, `'ja'`, …). Manual captions are preferred over auto-generated, and an exact match is preferred over a partial match. |
+| `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation. Use this to route through a residential proxy on Vercel / AWS Lambda / Workers. See [Making it work in production](#making-it-work-in-production). |
 
-### getVideoDetails({ videoID, lang, fetch })
+Resolves to `Subtitle[]`. Returns an empty array if the video plays but has no caption track in the requested language. **Throws** if the video is unavailable on any extraction path (see [Error handling](#error-handling)).
 
-- `videoID` (string) - The YouTube video ID
-- `lang` (string) - Optional, the language code for the subtitles (e.g., 'en', 'fr', 'de'). Default is 'en' (English)
-- `fetch` (typeof fetch) - Optional, a custom fetch implementation (see above)
+### `getVideoDetails({ videoID, lang?, fetch? })`
 
-Returns a promise that resolves to a VideoDetails object with the following properties:
+Same arguments as `getSubtitles`. Returns title, description, and the same subtitle array:
 
-- `title` (string) - The title of the video
-- `description` (string) - The description of the video
-- `subtitles (Subtitle[])` - An array of subtitle objects
+```ts
+const details = await getVideoDetails({ videoID, lang: 'en' });
+// → {
+//     title: 'Rick Astley - Never Gonna Give You Up (Official Music Video)',
+//     description: 'The official video for "Never Gonna Give You Up"…',
+//     subtitles: [{ start: '3.84', dur: '4.16', text: '...' }, …],
+//   }
+```
 
-### Exported Types
+If subtitles fail to extract but the video metadata is available, `subtitles` will be an empty array and the call still resolves (rather than throwing). This way you can always show title/description even when captions aren't available.
 
-The following TypeScript interfaces are exported for your use:
+### Types
 
-```typescript
+```ts
 interface Subtitle {
-  start: string; // Start time in seconds
-  dur: string; // Duration in seconds
-  text: string; // Caption text content
+  start: string;        // Segment start time, seconds
+  dur: string;          // Segment duration, seconds
+  text: string;         // Decoded text content
 }
 
 interface VideoDetails {
-  title: string; // Video title
-  description: string; // Video description
-  subtitles: Subtitle[]; // Array of subtitle objects
+  title: string;
+  description: string;
+  subtitles: Subtitle[];
+}
+
+interface Options {
+  videoID: string;
+  lang?: string;
+  fetch?: typeof fetch;
+}
+```
+
+All three are exported by name and can be imported directly:
+
+```ts
+import type { Subtitle, VideoDetails, Options } from 'youtube-caption-extractor';
+```
+
+## Languages
+
+The `lang` argument is a hint, not a strict filter. Track selection precedence:
+
+1. **Manual captions in the requested language** (`vssId === '.<lang>'`)
+2. **Auto-generated captions in the requested language** (`vssId === 'a.<lang>'`)
+3. **Any track whose `languageCode` matches** the requested code
+4. **Any track whose `vssId` contains the requested code** (partial match)
+5. **The first available track** as a final fallback
+
+If you pass `lang: 'en'` and the video only has Spanish manual captions, you'll get those — the library prefers *some* output over none. If you pass a code that doesn't exist on the video, you'll typically get the video's primary language track. To check whether you got what you asked for, inspect the first segment's text or compare against `VideoDetails.title` / `description`.
+
+## Error handling
+
+The library throws an `Error` (a regular `Error`, not a custom class) when no extraction path succeeds — typically a private video, a deleted video, or a server-side block (see [Deployment environments](#deployment-environments)).
+
+The error message has a stable, parseable structure:
+
+```
+Video not playable on any client. Attempts:
+tv: ERROR - <reason from YouTube>
+android_vr: LOGIN_REQUIRED - Sign in to confirm you're not a bot
+ios: LOGIN_REQUIRED - Sign in to confirm you're not a bot
+mweb: LOGIN_REQUIRED - Sign in to confirm you're not a bot
+```
+
+If `LOGIN_REQUIRED` or `not a bot` appears in the message, the client failed YouTube's bot challenge — almost always means you're hitting it from a datacenter IP and need a proxy. If the error names a specific YouTube status like `ERROR - Video unavailable`, the video itself is the problem.
+
+A common pattern for surfacing this gracefully:
+
+```ts
+try {
+  const subtitles = await getSubtitles({ videoID, lang });
+  return subtitles;
+} catch (err) {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('LOGIN_REQUIRED') || msg.includes('not a bot')) {
+    throw new Error('youtube_blocked_by_bot_challenge');
+  }
+  if (msg.includes('Video unavailable') || msg.includes('private')) {
+    throw new Error('video_not_accessible');
+  }
+  throw err;
 }
 ```
 
 ## Deployment environments
 
-This package calls YouTube's internal player API. **YouTube actively blocks
-requests from datacenter IP ranges** with a "Sign in to confirm you're not
-a bot" challenge — this affects most serverless and cloud platforms.
+This package calls YouTube's internal player API. **YouTube actively blocks requests from datacenter IP ranges** with a bot challenge — this affects most serverless and cloud platforms regardless of how the library is configured.
 
-| Environment | Source IP | Works? |
+| Environment | Source IP | Works out of the box? |
 |---|---|---|
 | Local development | Residential | ✅ Yes |
 | Self-hosted Node server on a residential connection | Residential | ✅ Yes |
 | Traditional VPS / dedicated server | Datacenter | ⚠️ Sometimes — depends on the host's IP reputation |
-| Vercel functions (and `vercel dev` deployed) | AWS datacenter | ❌ Typically blocked |
+| Vercel Functions / Vercel Edge | AWS / edge datacenter | ❌ Typically blocked |
 | AWS Lambda / Netlify Functions | AWS datacenter | ❌ Typically blocked |
-| Cloudflare Workers / Vercel Edge | Edge datacenter | ❌ Typically blocked |
+| Cloudflare Workers | Cloudflare edge | ❌ Typically blocked |
 | Browser (client-side `fetch`) | Residential, but… | ❌ CORS blocks the InnerTube call |
 
-### Making it work on Vercel / AWS / Workers
+This is not a library-level limitation — `yt-dlp` and every other YouTube extractor hits the same wall. There is no client-version trick or header that bypasses it; YouTube filters by source IP.
 
-When deploying to a blocked environment, route requests through a
-residential-IP proxy by passing a custom `fetch` implementation:
+### Making it work in production
+
+For deployments on blocked IPs, route requests through a **residential proxy** by passing a custom `fetch` implementation:
 
 ```ts
 import { getSubtitles } from 'youtube-caption-extractor';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
 
-// e.g. Bright Data, IPRoyal, Decodo, or your own residential proxy
 const dispatcher = new ProxyAgent(process.env.RESIDENTIAL_PROXY_URL!);
+
 const proxied: typeof fetch = (input, init) =>
   undiciFetch(input, { ...init, dispatcher }) as unknown as Promise<Response>;
 
@@ -214,67 +167,155 @@ const subtitles = await getSubtitles({
 });
 ```
 
-The `fetch` option also lets you wire up cookies, custom retries, regional
-routing, or any other transport behavior your deployment needs.
+Common residential-proxy providers: **Bright Data**, **IPRoyal**, **Decodo**, **Oxylabs**. Most start around $5–15/mo for modest traffic and offer a free trial.
 
-## Handling CORS issues in client-side applications
+The `fetch` option can also be used for:
 
-When using this package in a client-side application, you might encounter CORS (Cross-Origin Resource Sharing) issues. To handle these issues, it's recommended to create a server-side API route that fetches subtitles on behalf of the client. This way, you can ensure that your application respects CORS policies while still being able to fetch subtitles and video details.
+- **Caching layers** — wrap the global fetch with your own LRU/in-memory cache
+- **Authenticated proxies** — pass `Authorization` headers via a wrapper
+- **Region-specific egress** — route through a specific country's residential IPs
 
-For example, in a Next.js project you can create an API route like this:
+## Usage examples
 
-1. Create a new file under the pages/api folder, e.g., `pages/api/fetch-subtitles.js`.
-2. Inside the `fetch-subtitles.js` file, add the following code:
+### Next.js (App Router)
 
-```js
-import { getSubtitles, getVideoDetails } from 'youtube-caption-extractor';
+```ts
+// app/api/captions/route.ts
+import { NextResponse, type NextRequest } from 'next/server';
+import { getVideoDetails } from 'youtube-caption-extractor';
 
-export default async function handler(req, res) {
-  const { videoID, lang } = req.query;
+export async function GET(request: NextRequest) {
+  const videoID = request.nextUrl.searchParams.get('videoID');
+  const lang = request.nextUrl.searchParams.get('lang') ?? 'en';
+
+  if (!videoID) {
+    return NextResponse.json({ error: 'Missing videoID' }, { status: 400 });
+  }
 
   try {
-    const subtitles = await getSubtitles({ videoID, lang }); // call this if you only need the subtitles
-    const videoDetails = await getVideoDetails({ videoID, lang }); // call this if you need the video title and description, along with the subtitles
-    res.status(200).json({ subtitles, videoDetails });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const details = await getVideoDetails({ videoID, lang });
+    return NextResponse.json(details);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 ```
 
-3. Now, in your client-side component, you can fetch subtitles using the API route:
+Call from a client component with `fetch('/api/captions?videoID=...')`. This avoids the browser CORS issue and keeps the YouTube call server-side.
 
-```js
-import { useEffect, useState } from 'react';
+### Express
 
-const MyComponent = () => {
-  const [subtitles, setSubtitles] = useState([]);
-  const [videoDetails, setVideoDetails] = useState({});
+```ts
+import express from 'express';
+import { getSubtitles } from 'youtube-caption-extractor';
 
-  const videoID = 'video_id_here';
-  const lang = 'en'; // Optional, default is 'en' (English)
+const app = express();
 
-  useEffect(() => {
-    const fetchSubtitles = async (videoID, lang = 'en') => {
-      try {
-        const response = await fetch(
-          `/api/fetch-subtitles?videoID=${videoID}&lang=${lang}`
-        );
-        const data = await response.json();
-        setSubtitles(data.subtitles);
-        setVideoDetails(data.videoDetails);
-      } catch (error) {
-        console.error('Error fetching subtitles:', error);
-      }
-    };
+app.get('/captions/:videoID', async (req, res) => {
+  try {
+    const subtitles = await getSubtitles({
+      videoID: req.params.videoID,
+      lang: (req.query.lang as string) ?? 'en',
+    });
+    res.json({ subtitles });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+```
 
-    fetchSubtitles(videoID, lang);
-  }, [videoID, lang]);
+### Cloudflare Workers (requires a proxy)
 
-  // Render your component with the fetched subtitles
+```ts
+import { getSubtitles } from 'youtube-caption-extractor';
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const videoID = url.searchParams.get('videoID');
+    if (!videoID) return new Response('Missing videoID', { status: 400 });
+
+    // Workers' default fetch is gated by YouTube; proxy through a residential IP.
+    const proxiedFetch: typeof fetch = (input, init) =>
+      fetch(input, {
+        ...init,
+        // @ts-expect-error — Cloudflare extension for outbound routing
+        cf: { resolveOverride: env.RESIDENTIAL_PROXY_HOST },
+      });
+
+    try {
+      const subtitles = await getSubtitles({
+        videoID, lang: 'en', fetch: proxiedFetch,
+      });
+      return Response.json({ subtitles });
+    } catch (err) {
+      return Response.json(
+        { error: (err as Error).message },
+        { status: 500 }
+      );
+    }
+  },
 };
 ```
 
+## Debug logging
+
+The library is silent by default. To see what's happening internally — which client returned what, where it fell back, what URL was hit — set the `DEBUG` env var:
+
+```sh
+DEBUG=youtube-caption-extractor node your-script.js
+
+# Cloudflare Workers
+DEBUG=youtube-caption-extractor wrangler dev
+
+# Or DEBUG=* for everything
+```
+
+The logger uses only `console.log` and `process.env` (read defensively), so it works in any runtime that provides those — no `debug` package dependency.
+
+## TypeScript
+
+The package ships type definitions; no `@types/*` install needed. All three types (`Subtitle`, `VideoDetails`, `Options`) are exported:
+
+```ts
+import {
+  getSubtitles,
+  getVideoDetails,
+  type Subtitle,
+  type VideoDetails,
+  type Options,
+} from 'youtube-caption-extractor';
+
+async function transcript(opts: Options): Promise<Subtitle[]> {
+  return await getSubtitles(opts);
+}
+```
+
+## Changelog
+
+### v1.10.0
+
+- Caption extraction is reliable again — fixes a regression where `getSubtitles` would silently return `[]` for many videos.
+- Multi-path extraction with automatic fallback across clients; gracefully degrades when one path is unavailable.
+- json3-based subtitle parser replaces the legacy XML regex, fixing multi-line and special-character edge cases.
+- New optional `fetch` option for routing through a residential proxy.
+- `Options` interface now exported.
+- `engines.node` bumped to `>=18.0.0`.
+- Slimmer install — published tarball is ~85% smaller.
+
+### v1.9.0
+
+- `Subtitle` interface exported.
+- Universal debug logger that works in Node.js, Cloudflare Workers, and edge runtimes.
+- Library is silent by default in production.
+
+### v1.4.2
+
+- TypeScript definitions shipped with the package.
+- Node.js and edge runtime support.
+- New `getVideoDetails` API for title + description + subtitles in one call.
+
 ## License
 
-ISC
+[MIT](./LICENSE)
