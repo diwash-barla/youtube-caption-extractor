@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  # Nightly canary: catches YouTube tightening client requirements before users do.
+  # If this fails, the client versions in src/index.ts CLIENT_PROFILES probably
+  # need bumping. Track yt-dlp's youtube extractor for known-good versions.
+  schedule:
+    - cron: '0 6 * * *' # 06:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # --retry=2 absorbs transient YouTube hiccups (rate limits, brief 5xx).
+      # Persistent failure across all retries indicates real drift.
+      - name: Test
+        run: npx vitest run --retry=2
+
+      # Open (or comment on) a tracking issue when the *scheduled* run fails.
+      # Run on one matrix leg only to avoid duplicate issues.
+      - name: Report scheduled-run failure
+        if: failure() && github.event_name == 'schedule' && matrix.node == 22
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Nightly YouTube CI check failed — likely client-version drift"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          BODY=$(cat <<EOF
+          The scheduled CI run against YouTube failed. This typically means YouTube has tightened
+          enforcement on one of the InnerTube clients used by the library, and the \`CLIENT_PROFILES\`
+          array in [\`src/index.ts\`](../blob/main/src/index.ts) needs new client versions.
+
+          **Failed run:** $RUN_URL
+
+          **Update procedure:**
+          1. Check recent commits to [yt-dlp's youtube extractor](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/youtube/_base.py) for current \`clientVersion\` values.
+          2. Bump \`clientVersion\` (and \`userAgent\` / \`osVersion\` if needed) in the relevant \`CLIENT_PROFILES\` entry.
+          3. Run \`npm test\` locally to confirm.
+          4. Release as a patch version (e.g. 1.10.x).
+          EOF
+          )
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --title "$TITLE" --body "$BODY"
+          fi

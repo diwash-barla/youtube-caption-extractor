@@ -2,7 +2,16 @@
 
 A lightweight package to scrape and parse captions (subtitles) from YouTube videos, supporting both user-submitted and auto-generated captions with language options. In addition, it can also retrieve the title and description of the YouTube video.
 
-## What's new in latest version (v1.9.0)
+## What's new in v1.10.0
+
+- **🔧 Fixed empty subtitles**: Resolves a regression where `getSubtitles` would return an empty array for many videos. Caption extraction is reliable again.
+- **♻️ More resilient**: Added automatic retry across multiple extraction paths so the library degrades gracefully when one path is unavailable.
+- **📐 More accurate parsing**: Improved handling of multi-line captions and special characters.
+- **🪶 Slimmer install**: The published package is now ~85% smaller (4 files instead of 25).
+- **🆙 Node 18+**: `engines.node` bumped to `>=18.0.0`.
+- **📤 `Options` interface now exported**.
+
+## v1.9.0
 
 - **🎯 TypeScript Export Fix**: The `Subtitle` interface is now properly exported, allowing TypeScript users to import and use it for type annotations
 - **🔇 Universal Debug Logging**: Replaced console.log pollution with a lightweight, universal debug logger that works in all environments (Node.js, Cloudflare Workers, Edge Runtime)

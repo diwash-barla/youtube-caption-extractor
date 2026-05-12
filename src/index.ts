@@ -5,7 +5,6 @@ import striptags from 'striptags';
 const createLogger = (namespace: string) => {
   const isDebugEnabled = () => {
     try {
-      // Try to access environment variables in a safe way
       const env =
         typeof process !== 'undefined' && process.env ? process.env : {};
       const debugEnv = env.DEBUG || '';
@@ -19,8 +18,6 @@ const createLogger = (namespace: string) => {
     if (isDebugEnabled()) {
       const timestamp = new Date().toISOString();
       const logMessage = `${timestamp} ${namespace} ${message}`;
-
-      // Use console.log safely - available in all environments
       if (args.length > 0) {
         console.log(logMessage, ...args);
       } else {
@@ -38,12 +35,7 @@ export interface Subtitle {
   text: string;
 }
 
-interface CaptionTrack {
-  baseUrl: string;
-  vssId: string;
-}
-
-interface Options {
+export interface Options {
   videoID: string;
   lang?: string;
 }
@@ -54,361 +46,223 @@ export interface VideoDetails {
   subtitles: Subtitle[];
 }
 
-// YouTube InnerTube API configuration based on YouTube.js
-const INNERTUBE_CONFIG = {
-  API_BASE: 'https://www.youtube.com/youtubei/v1',
-  API_KEY: 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8',
-  CLIENT: {
-    WEB: {
-      NAME: 'WEB',
-      VERSION: '2.20250222.10.00',
-    },
-    ANDROID: {
-      NAME: 'ANDROID',
-      VERSION: '19.35.36',
+interface CaptionTrack {
+  baseUrl: string;
+  vssId?: string;
+  languageCode?: string;
+  kind?: string;
+}
+
+interface PlayerResponse {
+  playabilityStatus?: {
+    status?: string;
+    reason?: string;
+  };
+  videoDetails?: {
+    title?: string;
+    shortDescription?: string;
+  };
+  captions?: {
+    playerCaptionsTracklistRenderer?: {
+      captionTracks?: CaptionTrack[];
+    };
+  };
+}
+
+// InnerTube client profiles. Listed in fallback order — IOS first because
+// Apple app review constraints prevent YouTube from requiring PO tokens or
+// browser attestation on mobile native clients, making it the most reliable
+// path for caption extraction (this is also what yt-dlp prefers).
+//
+// When YouTube tightens enforcement and one of these starts returning empty
+// captions or `UNPLAYABLE`, bump its clientVersion to a current value and
+// keep going. Track yt-dlp's `youtube.py` for known-good versions.
+interface ClientProfile {
+  name: string;
+  clientName: string;
+  clientVersion: string;
+  clientNameHeader: string;
+  userAgent: string;
+  context: Record<string, unknown>;
+}
+
+const CLIENT_PROFILES: ClientProfile[] = [
+  {
+    name: 'ios',
+    clientName: 'IOS',
+    clientVersion: '20.10.4',
+    clientNameHeader: '5',
+    userAgent:
+      'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
+    context: {
+      deviceMake: 'Apple',
+      deviceModel: 'iPhone16,2',
+      platform: 'MOBILE',
+      osName: 'iOS',
+      osVersion: '18.3.2.22D82',
     },
   },
-};
+  {
+    name: 'mweb',
+    clientName: 'MWEB',
+    clientVersion: '2.20251209.01.00',
+    clientNameHeader: '2',
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    context: {
+      platform: 'MOBILE',
+      osName: 'iOS',
+      osVersion: '17.5.1',
+    },
+  },
+  {
+    name: 'tv',
+    clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+    clientVersion: '2.0',
+    clientNameHeader: '85',
+    userAgent:
+      'Mozilla/5.0 (PlayStation 4 5.55) AppleWebKit/601.2 (KHTML, like Gecko)',
+    context: {
+      platform: 'TV',
+    },
+  },
+];
 
-// Detect serverless environment
-const isServerless = !!(
-  process.env.VERCEL ||
-  process.env.AWS_LAMBDA_FUNCTION_NAME ||
-  process.env.NETLIFY ||
-  process.env.CF_WORKER
-);
+const INNERTUBE_ENDPOINT =
+  'https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false';
 
-// Generate proper session data for serverless environments
-function generateSessionData() {
-  const visitorData = generateVisitorData();
-
-  return {
+async function fetchPlayerWithClient(
+  videoID: string,
+  client: ClientProfile
+): Promise<PlayerResponse> {
+  const body = {
     context: {
       client: {
+        clientName: client.clientName,
+        clientVersion: client.clientVersion,
         hl: 'en',
         gl: 'US',
-        clientName: INNERTUBE_CONFIG.CLIENT.WEB.NAME,
-        clientVersion: INNERTUBE_CONFIG.CLIENT.WEB.VERSION,
-        visitorData,
+        ...client.context,
       },
-      user: {
-        enableSafetyMode: false,
-      },
-      request: {
-        useSsl: true,
-      },
+      user: { lockedSafetyMode: false },
+      request: { useSsl: true },
     },
-    visitorData,
-  };
-}
-
-// Generate visitor data (simplified version of YouTube.js approach)
-function generateVisitorData(): string {
-  // This is a simplified version - YouTube.js uses more complex protobuf encoding
-  const chars =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-  let result = '';
-  for (let i = 0; i < 11; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-}
-
-// Enhanced fetch with proper InnerTube headers
-async function fetchInnerTube(endpoint: string, data: any): Promise<Response> {
-  const headers = {
-    'Content-Type': 'application/json',
-    Accept: '*/*',
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-    'X-Youtube-Client-Version': INNERTUBE_CONFIG.CLIENT.WEB.VERSION,
-    'X-Youtube-Client-Name': '1', // WEB client ID
-    'X-Goog-Visitor-Id': data.visitorData,
-    Origin: 'https://www.youtube.com',
-    Referer: 'https://www.youtube.com/',
-  };
-
-  const url = `${INNERTUBE_CONFIG.API_BASE}${endpoint}?key=${INNERTUBE_CONFIG.API_KEY}`;
-
-  debug(`Calling InnerTube endpoint: ${endpoint}`);
-
-  return await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(data),
-  });
-}
-
-// Get video info using proper InnerTube API
-async function getVideoInfo(videoID: string) {
-  const sessionData = generateSessionData();
-
-  const payload = {
-    ...sessionData,
     videoId: videoID,
-    playbackContext: {
-      contentPlaybackContext: {
-        vis: 0,
-        splay: false,
-        lactMilliseconds: '-1',
-      },
-    },
-    racyCheckOk: true,
     contentCheckOk: true,
+    racyCheckOk: true,
   };
 
-  const response = await fetchInnerTube('/player', payload);
+  debug(`Calling InnerTube /player with ${client.name} client`);
+
+  const response = await fetch(INNERTUBE_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: '*/*',
+      'User-Agent': client.userAgent,
+      'X-YouTube-Client-Name': client.clientNameHeader,
+      'X-YouTube-Client-Version': client.clientVersion,
+      Origin: 'https://www.youtube.com',
+    },
+    body: JSON.stringify(body),
+  });
 
   if (!response.ok) {
     throw new Error(
-      `Player API failed: ${response.status} ${response.statusText}`
+      `InnerTube /player failed (${client.name}): ${response.status} ${response.statusText}`
     );
   }
 
-  const playerData = await response.json();
-
-  if (playerData.playabilityStatus?.status === 'LOGIN_REQUIRED') {
-    debug(` LOGIN_REQUIRED status, trying next endpoint`);
-
-    // Try the next endpoint for additional data including engagement panels
-    const nextPayload = {
-      ...sessionData,
-      videoId: videoID,
-    };
-
-    const nextResponse = await fetchInnerTube('/next', nextPayload);
-
-    if (!nextResponse.ok) {
-      throw new Error(
-        `Next API failed: ${nextResponse.status} ${nextResponse.statusText}`
-      );
-    }
-
-    const nextData = await nextResponse.json();
-    debug(` Next API response keys:`, Object.keys(nextData));
-
-    return { playerData, nextData };
-  }
-
-  debug(`Player API success, status:`, playerData.playabilityStatus?.status);
-  return { playerData, nextData: null };
+  return (await response.json()) as PlayerResponse;
 }
 
-// Extract transcript using proper engagement panel approach (like YouTube.js)
-async function getTranscriptFromEngagementPanel(
-  videoID: string,
-  nextData: any
-): Promise<Subtitle[]> {
-  if (!nextData?.engagementPanels) {
-    debug(` No engagement panels found`);
-    return [];
-  }
+// Try clients in order until one returns a playable response with captions.
+// Returns the first response that has captionTracks; otherwise the last
+// playable response (so the caller can still get title/description).
+async function fetchPlayer(videoID: string): Promise<PlayerResponse> {
+  let lastPlayable: PlayerResponse | null = null;
+  let lastError: Error | null = null;
 
-  debug(` Found ${nextData.engagementPanels.length} engagement panels`);
+  for (const client of CLIENT_PROFILES) {
+    try {
+      const data = await fetchPlayerWithClient(videoID, client);
+      const status = data.playabilityStatus?.status;
+      debug(`${client.name} client returned playabilityStatus=${status}`);
 
-  // Find the transcript panel
-  const transcriptPanel = nextData.engagementPanels.find(
-    (panel: any) =>
-      panel?.engagementPanelSectionListRenderer?.panelIdentifier ===
-      'engagement-panel-searchable-transcript'
-  );
-
-  if (!transcriptPanel) {
-    debug(` No transcript engagement panel found`);
-    return [];
-  }
-
-  debug(` Found transcript engagement panel`);
-
-  // Extract continuation token for transcript
-  const content = transcriptPanel.engagementPanelSectionListRenderer?.content;
-
-  // Extract continuation token for transcript API
-
-  // Try multiple ways to find the continuation token
-  let continuationItem;
-  let token;
-
-  // Method 1: Direct continuationItemRenderer
-  continuationItem = content?.continuationItemRenderer;
-
-  // Check for different token/params structures
-  if (continuationItem?.continuationEndpoint?.continuationCommand?.token) {
-    token = continuationItem.continuationEndpoint.continuationCommand.token;
-    debug(` Found token via continuationCommand`);
-  } else if (
-    continuationItem?.continuationEndpoint?.getTranscriptEndpoint?.params
-  ) {
-    token = continuationItem.continuationEndpoint.getTranscriptEndpoint.params;
-    debug(` Found token via getTranscriptEndpoint`);
-  }
-
-  // Method 2: Inside sectionListRenderer
-  if (!token && content?.sectionListRenderer?.contents?.[0]) {
-    continuationItem =
-      content.sectionListRenderer.contents[0].continuationItemRenderer;
-    if (continuationItem?.continuationEndpoint?.continuationCommand?.token) {
-      token = continuationItem.continuationEndpoint.continuationCommand.token;
-    }
-  }
-
-  // Method 3: Look for transcriptRenderer with footer
-  if (!token && content?.sectionListRenderer?.contents) {
-    for (const item of content.sectionListRenderer.contents) {
-      if (item?.transcriptRenderer) {
-        // Look for footer with continuation
-        const footer = item.transcriptRenderer.footer;
+      if (status && status !== 'OK') {
+        // Surface real errors (LOGIN_REQUIRED, AGE_VERIFICATION_REQUIRED,
+        // ERROR for private/deleted videos). Don't keep retrying for these.
         if (
-          footer?.transcriptFooterRenderer?.languageMenu
-            ?.sortFilterSubMenuRenderer?.subMenuItems
+          status === 'LOGIN_REQUIRED' ||
+          status === 'ERROR' ||
+          status === 'AGE_VERIFICATION_REQUIRED'
         ) {
-          // Find English or first available language
-          const menuItems =
-            footer.transcriptFooterRenderer.languageMenu
-              .sortFilterSubMenuRenderer.subMenuItems;
-          const englishItem =
-            menuItems.find(
-              (item: any) =>
-                item?.title?.toLowerCase().includes('english') ||
-                item?.selected === true
-            ) || menuItems[0];
-
-          if (englishItem?.continuation?.reloadContinuationData?.continuation) {
-            token =
-              englishItem.continuation.reloadContinuationData.continuation;
-            break;
-          }
+          throw new Error(
+            `Video not playable: ${status}${
+              data.playabilityStatus?.reason
+                ? ` - ${data.playabilityStatus.reason}`
+                : ''
+            }`
+          );
         }
+        // UNPLAYABLE / soft errors → try the next client
+        continue;
       }
+
+      lastPlayable = data;
+      const tracks = data.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+      if (tracks && tracks.length > 0) {
+        return data;
+      }
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      debug(`${client.name} client error: ${lastError.message}`);
     }
   }
 
-  if (!token) {
-    debug(` No continuation token found in transcript panel`);
-    return [];
-  }
-  debug(` Found continuation token, calling get_transcript`);
-
-  // Call the get_transcript endpoint
-  const sessionData = generateSessionData();
-  const transcriptPayload = {
-    ...sessionData,
-    params: token,
-  };
-
-  const transcriptResponse = await fetchInnerTube(
-    '/get_transcript',
-    transcriptPayload
-  );
-
-  if (!transcriptResponse.ok) {
-    throw new Error(
-      `Transcript API failed: ${transcriptResponse.status} ${transcriptResponse.statusText}`
-    );
-  }
-
-  const transcriptData = await transcriptResponse.json();
-  debug(` Transcript API response keys:`, Object.keys(transcriptData));
-
-  // Parse transcript segments
-  const segments =
-    transcriptData?.actions?.[0]?.updateEngagementPanelAction?.content
-      ?.transcriptRenderer?.content?.transcriptSearchPanelRenderer?.body
-      ?.transcriptSegmentListRenderer?.initialSegments;
-
-  if (!segments || !Array.isArray(segments)) {
-    debug(` No transcript segments found`);
-    return [];
-  }
-
-  debug(` Found ${segments.length} transcript segments`);
-
-  // Successfully parsing transcript segments
-
-  const subtitles: Subtitle[] = [];
-  let debugCount = 0;
-
-  for (const segment of segments) {
-    if (segment.transcriptSegmentRenderer) {
-      const renderer = segment.transcriptSegmentRenderer;
-
-      // Extract subtitle data
-
-      const startMs = parseInt(renderer.startMs || '0');
-      const endMs = parseInt(renderer.endMs || '0');
-
-      // Try different text extraction paths
-      let text = '';
-      if (renderer.snippet?.simpleText) {
-        text = renderer.snippet.simpleText;
-      } else if (renderer.snippet?.runs) {
-        text = renderer.snippet.runs.map((run: any) => run.text).join('');
-      } else if (renderer.snippet?.text) {
-        text = renderer.snippet.text;
-      }
-
-      // Log progress for first few segments
-      if (debugCount < 5) {
-        debug(
-          ` Segment: startMs=${startMs}, endMs=${endMs}, text="${text.substring(
-            0,
-            50
-          )}${text.length > 50 ? '...' : ''}"`
-        );
-        debugCount++;
-      }
-
-      if (text.trim()) {
-        subtitles.push({
-          start: (startMs / 1000).toString(),
-          dur: ((endMs - startMs) / 1000).toString(),
-          text: he.decode(striptags(text)),
-        });
-      }
-    }
-  }
-
-  return subtitles;
+  if (lastPlayable) return lastPlayable;
+  throw lastError ?? new Error('All InnerTube clients failed');
 }
 
-// Fallback: Extract captions from player data (traditional method)
-async function getSubtitlesFromCaptions(
-  videoID: string,
-  playerData: any,
-  lang: string = 'en'
-): Promise<Subtitle[]> {
-  const captionTracks =
-    playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+function pickCaptionTrack(
+  tracks: CaptionTrack[],
+  lang: string
+): CaptionTrack | null {
+  if (!tracks.length) return null;
+  return (
+    tracks.find((t) => t.vssId === `.${lang}`) || // manual captions in requested lang
+    tracks.find((t) => t.vssId === `a.${lang}`) || // auto-generated in requested lang
+    tracks.find((t) => t.languageCode === lang) ||
+    tracks.find((t) => t.vssId?.includes(`.${lang}`)) ||
+    tracks[0]
+  );
+}
 
-  if (!captionTracks || !Array.isArray(captionTracks)) {
-    debug(` No caption tracks found in player data`);
-    return [];
-  }
+interface Json3Segment {
+  utf8?: string;
+}
 
-  debug(` Found ${captionTracks.length} caption tracks`);
+interface Json3Event {
+  tStartMs?: number;
+  dDurationMs?: number;
+  segs?: Json3Segment[];
+  aAppend?: number;
+}
 
-  // Find the appropriate subtitle language track
-  const subtitle =
-    captionTracks.find((track: any) => track.vssId === `.${lang}`) ||
-    captionTracks.find((track: any) => track.vssId === `a.${lang}`) ||
-    captionTracks.find((track: any) => track.vssId?.includes(`.${lang}`)) ||
-    captionTracks[0]; // fallback to first available
+interface Json3Transcript {
+  events?: Json3Event[];
+}
 
-  if (!subtitle?.baseUrl) {
-    debug(` No suitable caption track found`);
-    return [];
-  }
+async function fetchCaptionTrack(track: CaptionTrack): Promise<Subtitle[]> {
+  // Force json3 — structured, stable across edge cases, no regex parsing needed
+  let url = track.baseUrl.replace(/&fmt=[^&]+/, '');
+  url += '&fmt=json3';
 
-  debug(` Using caption track: ${subtitle.vssId}`);
+  debug(`Fetching caption track from ${url.split('?')[0]}?…`);
 
-  // Fetch the caption content
-  const captionUrl = subtitle.baseUrl.replace('&fmt=srv3', ''); // Force XML format
-
-  const response = await fetch(captionUrl, {
+  const response = await fetch(url, {
     headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      Referer: `https://www.youtube.com/watch?v=${videoID}`,
+      'User-Agent': CLIENT_PROFILES[0].userAgent,
     },
   });
 
@@ -416,290 +270,90 @@ async function getSubtitlesFromCaptions(
     throw new Error(`Caption fetch failed: ${response.status}`);
   }
 
-  const xmlText = await response.text();
-
-  if (!xmlText.trim() || !xmlText.includes('<text')) {
-    throw new Error('Caption content is empty or invalid');
+  const text = await response.text();
+  if (!text.trim()) {
+    return [];
   }
 
-  debug(` Caption XML length: ${xmlText.length} characters`);
-
-  // Parse XML captions
-  const startRegex = /start="([\d.]+)"/;
-  const durRegex = /dur="([\d.]+)"/;
-
-  return extractSubtitlesFromXML(xmlText, startRegex, durRegex);
-}
-
-function extractSubtitlesFromXML(
-  transcript: string,
-  startRegex: RegExp,
-  durRegex: RegExp
-): Subtitle[] {
-  return transcript
-    .replace('<?xml version="1.0" encoding="utf-8" ?><transcript>', '')
-    .replace('</transcript>', '')
-    .split('</text>')
-    .filter((line: string) => line && line.trim())
-    .reduce((acc: Subtitle[], line: string) => {
-      const startResult = startRegex.exec(line);
-      const durResult = durRegex.exec(line);
-
-      if (!startResult || !durResult) {
-        return acc;
-      }
-
-      const [, start] = startResult;
-      const [, dur] = durResult;
-
-      const htmlText = line
-        .replace(/<text.+>/, '')
-        .replace(/&amp;/gi, '&')
-        .replace(/<\/?[^>]+(>|$)/g, '');
-      const decodedText = he.decode(htmlText);
-      const text = striptags(decodedText);
-
-      acc.push({
-        start,
-        dur,
-        text,
-      });
-
-      return acc;
-    }, []);
-}
-
-export const getVideoDetails = async ({
-  videoID,
-  lang = 'en',
-}: Options): Promise<VideoDetails> => {
+  let data: Json3Transcript;
   try {
-    debug(` Getting video details for ${videoID}, serverless: ${isServerless}`);
-
-    // Get video info using proper InnerTube API
-    const { playerData, nextData } = await getVideoInfo(videoID);
-
-    // Extract basic video details
-    const videoDetails = playerData?.videoDetails;
-
-    // Extract title from multiple possible locations
-    let title = 'No title found';
-    if (videoDetails?.title) {
-      title = videoDetails.title;
-    } else if (
-      nextData?.contents?.twoColumnWatchNextResults?.results?.results
-        ?.contents?.[0]?.videoPrimaryInfoRenderer?.title?.runs?.[0]?.text
-    ) {
-      title =
-        nextData.contents.twoColumnWatchNextResults.results.results.contents[0]
-          .videoPrimaryInfoRenderer.title.runs[0].text;
-    } else if (nextData?.metadata?.videoMetadataRenderer?.title?.simpleText) {
-      title = nextData.metadata.videoMetadataRenderer.title.simpleText;
-    } else if (nextData?.videoDetails?.title) {
-      title = nextData.videoDetails.title;
-    }
-
-    // Extract description from multiple possible locations
-    let description = 'No description found';
-    if (videoDetails?.shortDescription) {
-      description = videoDetails.shortDescription;
-    } else if (
-      nextData?.contents?.twoColumnWatchNextResults?.results?.results
-        ?.contents?.[1]?.videoSecondaryInfoRenderer?.description?.runs
-    ) {
-      description =
-        nextData.contents.twoColumnWatchNextResults.results.results.contents[1].videoSecondaryInfoRenderer.description.runs
-          .map((run: any) => run.text)
-          .join('');
-    } else if (
-      nextData?.contents?.twoColumnWatchNextResults?.results?.results
-        ?.contents?.[0]?.videoPrimaryInfoRenderer?.videoActions?.menuRenderer
-        ?.topLevelButtons
-    ) {
-      // Look for description in primary info renderer
-      const primaryInfo =
-        nextData.contents.twoColumnWatchNextResults.results.results.contents[0]
-          .videoPrimaryInfoRenderer;
-      if (primaryInfo?.description?.runs) {
-        description = primaryInfo.description.runs
-          .map((run: any) => run.text)
-          .join('');
-      }
-    } else if (
-      nextData?.metadata?.videoMetadataRenderer?.description?.simpleText
-    ) {
-      description =
-        nextData.metadata.videoMetadataRenderer.description.simpleText;
-    } else if (nextData?.videoDetails?.shortDescription) {
-      description = nextData.videoDetails.shortDescription;
-    }
-
-    // Additional search in the secondary info renderer with alternative path
-    if (
-      description === 'No description found' &&
-      nextData?.contents?.twoColumnWatchNextResults?.results?.results?.contents
-    ) {
-      for (const content of nextData.contents.twoColumnWatchNextResults.results
-        .results.contents) {
-        if (content?.videoSecondaryInfoRenderer?.description?.runs) {
-          description = content.videoSecondaryInfoRenderer.description.runs
-            .map((run: any) => run.text)
-            .join('');
-          break;
-        }
-        if (
-          content?.videoSecondaryInfoRenderer?.attributedDescription?.content
-        ) {
-          description =
-            content.videoSecondaryInfoRenderer.attributedDescription.content;
-          break;
-        }
-      }
-    }
-
-    // Search in engagement panels for description
-    if (description === 'No description found' && nextData?.engagementPanels) {
-      for (const panel of nextData.engagementPanels) {
-        if (
-          panel?.engagementPanelSectionListRenderer?.content
-            ?.structuredDescriptionContentRenderer?.items
-        ) {
-          const items =
-            panel.engagementPanelSectionListRenderer.content
-              .structuredDescriptionContentRenderer.items;
-          for (const item of items) {
-            if (item?.videoDescriptionHeaderRenderer?.description?.runs) {
-              description = item.videoDescriptionHeaderRenderer.description.runs
-                .map((run: any) => run.text)
-                .join('');
-              break;
-            }
-            if (
-              item?.expandableVideoDescriptionBodyRenderer?.descriptionBodyText
-                ?.runs
-            ) {
-              description =
-                item.expandableVideoDescriptionBodyRenderer.descriptionBodyText.runs
-                  .map((run: any) => run.text)
-                  .join('');
-              break;
-            }
-          }
-          if (description !== 'No description found') break;
-        }
-      }
-    }
-
-    debug(` Video title: ${title}`);
-    debug(
-      ` Video description: ${description.substring(0, 100)}${
-        description.length > 100 ? '...' : ''
-      }`
-    );
-
-    // Debug: Show available data structures for description
-    if (description === 'No description found') {
-      debug(` Description not found, checking available structures...`);
-      if (
-        nextData?.contents?.twoColumnWatchNextResults?.results?.results
-          ?.contents
-      ) {
-        nextData.contents.twoColumnWatchNextResults.results.results.contents.forEach(
-          (content: any, index: number) => {
-            debug(` Content ${index} keys:`, Object.keys(content || {}));
-            if (content?.videoSecondaryInfoRenderer) {
-              debug(
-                `videoSecondaryInfoRenderer keys:`,
-                Object.keys(content.videoSecondaryInfoRenderer || {})
-              );
-            }
-          }
-        );
-      }
-    }
-
-    let subtitles: Subtitle[] = [];
-
-    // Method 1: Try to get transcript from engagement panel (preferred, like YouTube.js)
-    if (nextData) {
-      try {
-        subtitles = await getTranscriptFromEngagementPanel(videoID, nextData);
-        if (subtitles.length > 0) {
-          debug(
-            ` Successfully got ${subtitles.length} subtitles from transcript API`
-          );
-        }
-      } catch (error) {
-        debug(
-          ` Transcript API failed:`,
-          error instanceof Error ? error.message : 'Unknown error'
-        );
-      }
-    }
-
-    // Method 2: Fallback to traditional caption tracks
-    if (subtitles.length === 0) {
-      try {
-        subtitles = await getSubtitlesFromCaptions(videoID, playerData, lang);
-        if (subtitles.length > 0) {
-          debug(
-            ` Successfully got ${subtitles.length} subtitles from captions`
-          );
-        }
-      } catch (error) {
-        debug(
-          ` Caption fallback failed:`,
-          error instanceof Error ? error.message : 'Unknown error'
-        );
-      }
-    }
-
-    if (subtitles.length === 0) {
-      debug(` No subtitles found for video: ${videoID} (language: ${lang})`);
-    }
-
-    return {
-      title,
-      description,
-      subtitles,
-    };
-  } catch (error) {
-    debug(`Error in getVideoDetails:`, error);
-    throw error;
+    data = JSON.parse(text) as Json3Transcript;
+  } catch {
+    throw new Error('Caption response was not valid JSON');
   }
-};
+
+  const events = data.events ?? [];
+  const subtitles: Subtitle[] = [];
+
+  for (const event of events) {
+    if (!event.segs || event.aAppend === 1) continue;
+    const raw = event.segs.map((s) => s.utf8 ?? '').join('');
+    const text = he.decode(striptags(raw)).trim();
+    if (!text) continue;
+    const startMs = event.tStartMs ?? 0;
+    const durMs = event.dDurationMs ?? 0;
+    subtitles.push({
+      start: (startMs / 1000).toString(),
+      dur: (durMs / 1000).toString(),
+      text,
+    });
+  }
+
+  debug(`Parsed ${subtitles.length} caption events from json3`);
+  return subtitles;
+}
+
+async function extractSubtitles(
+  playerData: PlayerResponse,
+  lang: string
+): Promise<Subtitle[]> {
+  const tracks =
+    playerData.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+  if (!tracks || tracks.length === 0) {
+    debug('No caption tracks available on this video');
+    return [];
+  }
+
+  const track = pickCaptionTrack(tracks, lang);
+  if (!track?.baseUrl) {
+    debug(`No matching caption track for lang=${lang}`);
+    return [];
+  }
+
+  debug(`Selected caption track: ${track.vssId ?? track.languageCode}`);
+  return fetchCaptionTrack(track);
+}
 
 export const getSubtitles = async ({
   videoID,
   lang = 'en',
 }: Options): Promise<Subtitle[]> => {
+  debug(`getSubtitles videoID=${videoID} lang=${lang}`);
+  const playerData = await fetchPlayer(videoID);
+  return extractSubtitles(playerData, lang);
+};
+
+export const getVideoDetails = async ({
+  videoID,
+  lang = 'en',
+}: Options): Promise<VideoDetails> => {
+  debug(`getVideoDetails videoID=${videoID} lang=${lang}`);
+  const playerData = await fetchPlayer(videoID);
+
+  const title = playerData.videoDetails?.title ?? 'No title found';
+  const description =
+    playerData.videoDetails?.shortDescription ?? 'No description found';
+
+  let subtitles: Subtitle[] = [];
   try {
-    debug(` Getting subtitles for ${videoID}, serverless: ${isServerless}`);
-
-    const { playerData, nextData } = await getVideoInfo(videoID);
-
-    // Try transcript API first
-    if (nextData) {
-      try {
-        const subtitles = await getTranscriptFromEngagementPanel(
-          videoID,
-          nextData
-        );
-        if (subtitles.length > 0) {
-          return subtitles;
-        }
-      } catch (error) {
-        debug(
-          ` Transcript API failed:`,
-          error instanceof Error ? error.message : 'Unknown error'
-        );
-      }
-    }
-
-    // Fallback to captions
-    return await getSubtitlesFromCaptions(videoID, playerData, lang);
-  } catch (error) {
-    debug('Error getting subtitles:', error);
-    throw error;
+    subtitles = await extractSubtitles(playerData, lang);
+  } catch (err) {
+    debug(
+      `Subtitle extraction failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
   }
+
+  return { title, description, subtitles };
 };
