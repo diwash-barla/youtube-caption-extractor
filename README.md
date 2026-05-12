@@ -135,15 +135,15 @@ try {
 
 This package calls YouTube's internal player API. **YouTube filters requests by source IP** and gates many cloud/datacenter ranges with a bot challenge. Compatibility depends entirely on where your code egresses from.
 
-Compatibility, based on real measurements from a deployed test Worker (Nov 2026):
+Compatibility, based on real measurements from deployed test endpoints (May 2026 — 20 sequential requests per platform):
 
 | Environment | Source IP | Behavior |
 |---|---|---|
 | Local development | Residential | ✅ Reliable (close to 100%) |
 | Self-hosted Node server on a residential connection | Residential | ✅ Reliable |
 | Traditional VPS / dedicated server | Datacenter | ⚠️ Depends on host IP reputation |
-| **Cloudflare Workers** | Cloudflare edge (mixed) | ⚠️ **~70% per request**, see [retry pattern](#cloudflare-workers-pattern-retry-on-bot-challenge) below — usable in production with retries |
-| Vercel Functions / Vercel Edge | AWS / edge datacenter | ❌ Almost always blocked, needs proxy |
+| **Cloudflare Workers** | Cloudflare edge (mixed) | ⚠️ **~70% per request** (14/20 in our test), see [retry pattern](#cloudflare-workers-pattern-retry-on-bot-challenge) below — usable in production with retries |
+| Vercel Functions / Vercel Edge | AWS / edge datacenter | ❌ **0% in our test** (0/20), needs residential proxy |
 | AWS Lambda / Netlify Functions | AWS datacenter | ❌ Almost always blocked, needs proxy |
 | Browser (client-side `fetch`) | Residential, but… | ❌ CORS blocks the InnerTube call — proxy through your own server |
 
