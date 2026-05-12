@@ -7,6 +7,7 @@ A lightweight package to scrape and parse captions (subtitles) from YouTube vide
 - **🔧 Fixed empty subtitles**: Resolves a regression where `getSubtitles` would return an empty array for many videos. Caption extraction is reliable again.
 - **♻️ More resilient**: Added automatic retry across multiple extraction paths so the library degrades gracefully when one path is unavailable.
 - **📐 More accurate parsing**: Improved handling of multi-line captions and special characters.
+- **🔌 Custom `fetch` option**: `getSubtitles` and `getVideoDetails` now accept a `fetch` option, so you can route requests through a residential proxy when deploying to Vercel / AWS Lambda / Workers (YouTube blocks datacenter IPs — see [Deployment environments](#deployment-environments)).
 - **🪶 Slimmer install**: The published package is now ~85% smaller (4 files instead of 25).
 - **🆙 Node 18+**: `engines.node` bumped to `>=18.0.0`.
 - **📤 `Options` interface now exported**.
@@ -134,10 +135,11 @@ DEBUG=youtube-caption-extractor wrangler dev
 
 ## API
 
-### getSubtitles({ videoID, lang })
+### getSubtitles({ videoID, lang, fetch })
 
 - `videoID` (string) - The YouTube video ID
 - `lang` (string) - Optional, the language code for the subtitles (e.g., 'en', 'fr', 'de'). Default is 'en' (English)
+- `fetch` (typeof fetch) - Optional, a custom fetch implementation. Use this to route requests through a residential proxy when deploying to environments where YouTube blocks datacenter IPs (Vercel, AWS Lambda, Cloudflare Workers). See [Deployment environments](#deployment-environments) for details.
 
 Returns a promise that resolves to an array of subtitle objects with the following properties:
 
@@ -145,10 +147,11 @@ Returns a promise that resolves to an array of subtitle objects with the followi
 - `dur` (string) - The duration of the caption in seconds
 - `text` (string) - The text content of the caption
 
-### getVideoDetails({ videoID, lang })
+### getVideoDetails({ videoID, lang, fetch })
 
 - `videoID` (string) - The YouTube video ID
 - `lang` (string) - Optional, the language code for the subtitles (e.g., 'en', 'fr', 'de'). Default is 'en' (English)
+- `fetch` (typeof fetch) - Optional, a custom fetch implementation (see above)
 
 Returns a promise that resolves to a VideoDetails object with the following properties:
 
@@ -174,17 +177,45 @@ interface VideoDetails {
 }
 ```
 
-**Note:** The package automatically detects the deployment environment and uses the most appropriate method for data extraction. In serverless environments, it uses YouTube's engagement panel API for enhanced compatibility.
+## Deployment environments
 
-## Deployment Environments
+This package calls YouTube's internal player API. **YouTube actively blocks
+requests from datacenter IP ranges** with a "Sign in to confirm you're not
+a bot" challenge — this affects most serverless and cloud platforms.
 
-This package is optimized for both traditional server and serverless environments:
+| Environment | Source IP | Works? |
+|---|---|---|
+| Local development | Residential | ✅ Yes |
+| Self-hosted Node server on a residential connection | Residential | ✅ Yes |
+| Traditional VPS / dedicated server | Datacenter | ⚠️ Sometimes — depends on the host's IP reputation |
+| Vercel functions (and `vercel dev` deployed) | AWS datacenter | ❌ Typically blocked |
+| AWS Lambda / Netlify Functions | AWS datacenter | ❌ Typically blocked |
+| Cloudflare Workers / Vercel Edge | Edge datacenter | ❌ Typically blocked |
+| Browser (client-side `fetch`) | Residential, but… | ❌ CORS blocks the InnerTube call |
 
-- **✅ Local Development**: Full access to YouTube APIs with traditional caption extraction
-- **✅ Traditional Servers**: Works seamlessly with standard Node.js deployments
-- **✅ Serverless Platforms**: Auto-detects and adapts for Vercel, AWS Lambda, Netlify
-- **✅ Edge Runtime**: Full compatibility with Cloudflare Workers, Vercel Edge Functions, and other edge computing environments
-- **✅ Zero Node.js Dependencies**: Universal logging system works across all JavaScript runtimes
+### Making it work on Vercel / AWS / Workers
+
+When deploying to a blocked environment, route requests through a
+residential-IP proxy by passing a custom `fetch` implementation:
+
+```ts
+import { getSubtitles } from 'youtube-caption-extractor';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
+
+// e.g. Bright Data, IPRoyal, Decodo, or your own residential proxy
+const dispatcher = new ProxyAgent(process.env.RESIDENTIAL_PROXY_URL!);
+const proxied: typeof fetch = (input, init) =>
+  undiciFetch(input, { ...init, dispatcher }) as unknown as Promise<Response>;
+
+const subtitles = await getSubtitles({
+  videoID: 'dQw4w9WgXcQ',
+  lang: 'en',
+  fetch: proxied,
+});
+```
+
+The `fetch` option also lets you wire up cookies, custom retries, regional
+routing, or any other transport behavior your deployment needs.
 
 ## Handling CORS issues in client-side applications
 

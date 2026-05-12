@@ -38,6 +38,13 @@ export interface Subtitle {
 export interface Options {
   videoID: string;
   lang?: string;
+  /**
+   * Custom fetch implementation. Useful for routing requests through a
+   * residential proxy (undici's ProxyAgent, node-fetch + https-proxy-agent, etc.)
+   * when deploying to environments where YouTube blocks datacenter IPs
+   * (Vercel, AWS Lambda, Cloudflare Workers). Defaults to global fetch.
+   */
+  fetch?: typeof fetch;
 }
 
 export interface VideoDetails {
@@ -148,7 +155,8 @@ const INNERTUBE_ENDPOINT =
 
 async function fetchPlayerWithClient(
   videoID: string,
-  client: ClientProfile
+  client: ClientProfile,
+  fetchImpl: typeof fetch
 ): Promise<PlayerResponse> {
   const body = {
     context: {
@@ -169,7 +177,7 @@ async function fetchPlayerWithClient(
 
   debug(`Calling InnerTube /player with ${client.name} client`);
 
-  const response = await fetch(INNERTUBE_ENDPOINT, {
+  const response = await fetchImpl(INNERTUBE_ENDPOINT, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -200,13 +208,16 @@ async function fetchPlayerWithClient(
 // version is too old" — and different clients see different states for the
 // same video. Trying them all is cheap and the only reliable signal that a
 // video is truly inaccessible is when no client returns OK.
-async function fetchPlayer(videoID: string): Promise<PlayerResponse> {
+async function fetchPlayer(
+  videoID: string,
+  fetchImpl: typeof fetch
+): Promise<PlayerResponse> {
   let firstPlayable: PlayerResponse | null = null;
   const failures: string[] = [];
 
   for (const client of CLIENT_PROFILES) {
     try {
-      const data = await fetchPlayerWithClient(videoID, client);
+      const data = await fetchPlayerWithClient(videoID, client, fetchImpl);
       const status = data.playabilityStatus?.status;
       debug(`${client.name} client returned playabilityStatus=${status}`);
 
@@ -267,14 +278,17 @@ interface Json3Transcript {
   events?: Json3Event[];
 }
 
-async function fetchCaptionTrack(track: CaptionTrack): Promise<Subtitle[]> {
+async function fetchCaptionTrack(
+  track: CaptionTrack,
+  fetchImpl: typeof fetch
+): Promise<Subtitle[]> {
   // Force json3 — structured, stable across edge cases, no regex parsing needed
   let url = track.baseUrl.replace(/&fmt=[^&]+/, '');
   url += '&fmt=json3';
 
   debug(`Fetching caption track from ${url.split('?')[0]}?…`);
 
-  const response = await fetch(url, {
+  const response = await fetchImpl(url, {
     headers: {
       'User-Agent': CLIENT_PROFILES[0].userAgent,
     },
@@ -319,7 +333,8 @@ async function fetchCaptionTrack(track: CaptionTrack): Promise<Subtitle[]> {
 
 async function extractSubtitles(
   playerData: PlayerResponse,
-  lang: string
+  lang: string,
+  fetchImpl: typeof fetch
 ): Promise<Subtitle[]> {
   const tracks =
     playerData.captions?.playerCaptionsTracklistRenderer?.captionTracks;
@@ -335,24 +350,28 @@ async function extractSubtitles(
   }
 
   debug(`Selected caption track: ${track.vssId ?? track.languageCode}`);
-  return fetchCaptionTrack(track);
+  return fetchCaptionTrack(track, fetchImpl);
 }
 
 export const getSubtitles = async ({
   videoID,
   lang = 'en',
+  fetch: customFetch,
 }: Options): Promise<Subtitle[]> => {
+  const fetchImpl = customFetch ?? fetch;
   debug(`getSubtitles videoID=${videoID} lang=${lang}`);
-  const playerData = await fetchPlayer(videoID);
-  return extractSubtitles(playerData, lang);
+  const playerData = await fetchPlayer(videoID, fetchImpl);
+  return extractSubtitles(playerData, lang, fetchImpl);
 };
 
 export const getVideoDetails = async ({
   videoID,
   lang = 'en',
+  fetch: customFetch,
 }: Options): Promise<VideoDetails> => {
+  const fetchImpl = customFetch ?? fetch;
   debug(`getVideoDetails videoID=${videoID} lang=${lang}`);
-  const playerData = await fetchPlayer(videoID);
+  const playerData = await fetchPlayer(videoID, fetchImpl);
 
   const title = playerData.videoDetails?.title ?? 'No title found';
   const description =
@@ -360,7 +379,7 @@ export const getVideoDetails = async ({
 
   let subtitles: Subtitle[] = [];
   try {
-    subtitles = await extractSubtitles(playerData, lang);
+    subtitles = await extractSubtitles(playerData, lang, fetchImpl);
   } catch (err) {
     debug(
       `Subtitle extraction failed: ${
