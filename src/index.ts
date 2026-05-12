@@ -77,9 +77,14 @@ interface PlayerResponse {
 }
 
 // InnerTube client profiles, tried in order until one returns playable data
-// with caption tracks. TV is first because it has the loosest enforcement
-// (TV vendors can't auto-update, so YouTube doesn't impose hard version
-// gates on it). Mobile native clients come next for richer data when accepted.
+// with caption tracks. IOS is first because it's the most reliable client
+// when YouTube isn't actively filtering the source IP; ANDROID_VR and MWEB
+// follow as fallbacks with slightly different fingerprints.
+//
+// TVHTML5_SIMPLY_EMBEDDED_PLAYER v2.0 used to lead the chain but as of
+// v1.10.1 it's been removed — direct InnerTube probes (May 2026, see
+// docs/PR notes) showed YouTube globally rejects it with "no longer
+// supported in this application or device" regardless of source IP.
 //
 // When CI's nightly canary starts failing, the typical fix is to bump
 // clientVersion strings to current values (track yt-dlp's recent commits).
@@ -94,14 +99,18 @@ interface ClientProfile {
 
 const CLIENT_PROFILES: ClientProfile[] = [
   {
-    name: 'tv',
-    clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-    clientVersion: '2.0',
-    clientNameHeader: '85',
+    name: 'ios',
+    clientName: 'IOS',
+    clientVersion: '20.10.4',
+    clientNameHeader: '5',
     userAgent:
-      'Mozilla/5.0 (PlayStation 4 5.55) AppleWebKit/601.2 (KHTML, like Gecko)',
+      'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
     context: {
-      platform: 'TV',
+      deviceMake: 'Apple',
+      deviceModel: 'iPhone16,2',
+      platform: 'MOBILE',
+      osName: 'iOS',
+      osVersion: '18.3.2.22D82',
     },
   },
   {
@@ -118,21 +127,6 @@ const CLIENT_PROFILES: ClientProfile[] = [
       osName: 'Android',
       osVersion: '12L',
       androidSdkVersion: 32,
-    },
-  },
-  {
-    name: 'ios',
-    clientName: 'IOS',
-    clientVersion: '20.10.4',
-    clientNameHeader: '5',
-    userAgent:
-      'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
-    context: {
-      deviceMake: 'Apple',
-      deviceModel: 'iPhone16,2',
-      platform: 'MOBILE',
-      osName: 'iOS',
-      osVersion: '18.3.2.22D82',
     },
   },
   {

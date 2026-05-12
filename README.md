@@ -346,6 +346,13 @@ async function transcript(opts: Options): Promise<Subtitle[]> {
 
 ## Changelog
 
+### v1.10.1
+
+- **Dropped the dead TV client.** Direct InnerTube probing (May 2026) found that `TVHTML5_SIMPLY_EMBEDDED_PLAYER` v2.0 — the first client in the fallback chain — was being rejected globally by YouTube with *"YouTube is no longer supported in this application or device"*, regardless of source IP. It contributed zero successful extractions, just an extra round-trip per request. Removed.
+- **Reordered the fallback chain** to `IOS → ANDROID_VR → MWEB`. IOS is the most reliable client on residential IPs and the highest-success-rate one in our Cloudflare measurements.
+- **Result:** same success rate, one fewer round-trip per request when extraction succeeds on the first client (most common case). No API changes; fully backward-compatible.
+- This release does **not** change behavior on datacenter IPs (Vercel/Lambda/Workers) — the IP-based bot challenge that gates those platforms is unaffected by which client we identify as. See [Deployment environments](#deployment-environments) for the real path to making those work.
+
 ### v1.10.0
 
 - Caption extraction is reliable again — fixes a regression where `getSubtitles` would silently return `[]` for many videos.
