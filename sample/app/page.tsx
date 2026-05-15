@@ -86,7 +86,7 @@ const LANGUAGES = [
   ['zh', 'Chinese'],
 ] as const;
 
-const SAMPLE_IDS = ['Q0RFb53ExfY', 'jNQXAC9IVRw'];
+const SAMPLE_IDS = ['7GeFt8suV8E', 'jNQXAC9IVRw'];
 
 export default function HomePage() {
   const [input, setInput] = useState('');
