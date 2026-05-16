@@ -46,7 +46,7 @@ function formatSrtTime(sec: number): string {
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(
-    s
+    s,
   ).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
 }
 
@@ -126,9 +126,9 @@ export default function HomePage() {
     () =>
       subtitles.reduce(
         (acc, s) => acc + s.text.trim().split(/\s+/).filter(Boolean).length,
-        0
+        0,
       ),
-    [subtitles]
+    [subtitles],
   );
 
   const hasResults = subtitles.length > 0;
@@ -216,10 +216,10 @@ export default function HomePage() {
 
         {/* Headline */}
         <h1 className='mt-3 font-serif text-[44px] sm:text-[56px] leading-[1.15] tracking-[-0.02em] text-stone-900'>
-          <span className='highlight'>Read the transcript</span>
+          <span className='highlight'>Get the transcript</span>
           <br />
           <span className='highlight italic font-light'>
-            of any{' '}
+            for any{' '}
             <span className='not-italic font-normal tracking-[-0.01em]'>
               YouTube
             </span>{' '}
@@ -324,8 +324,8 @@ export default function HomePage() {
         </form>
 
         {/* Error / notice */}
-        {error && (
-          error.code === 'youtube_blocked_datacenter_ip' ? (
+        {error &&
+          (error.code === 'youtube_blocked_datacenter_ip' ? (
             <aside className='mt-8 rounded-md border border-amber-200 bg-amber-50/60 px-5 py-4'>
               <div className='font-mono text-[10px] uppercase tracking-[0.22em] text-amber-700 mb-2'>
                 Live demo limitation
@@ -356,8 +356,7 @@ export default function HomePage() {
             <p className='mt-6 text-sm text-stone-600 border-l-2 border-stone-300 pl-3'>
               {error.message}
             </p>
-          )
-        )}
+          ))}
 
         {/* Loading */}
         {isFetching && !hasResults && (
@@ -460,7 +459,7 @@ export default function HomePage() {
                       download(
                         subtitles.map((s) => s.text).join('\n'),
                         `${videoId}.txt`,
-                        'text/plain'
+                        'text/plain',
                       )
                     }
                     className='text-stone-500 hover:text-stone-900 transition-colors'
@@ -472,7 +471,7 @@ export default function HomePage() {
                       download(
                         buildSRT(subtitles),
                         `${videoId}.srt`,
-                        'application/x-subrip'
+                        'application/x-subrip',
                       )
                     }
                     className='text-stone-500 hover:text-stone-900 transition-colors'
@@ -507,13 +506,10 @@ export default function HomePage() {
               {/* Segments */}
               <ol className='space-y-2'>
                 {filteredSubs.map((sub, i) => (
-                  <li
-                    key={`${sub.start}-${i}`}
-                    className='flex gap-5 group'
-                  >
+                  <li key={`${sub.start}-${i}`} className='flex gap-5 group'>
                     <a
                       href={`https://youtu.be/${videoId}?t=${Math.floor(
-                        Number(sub.start)
+                        Number(sub.start),
                       )}s`}
                       target='_blank'
                       rel='noopener noreferrer'
@@ -523,9 +519,7 @@ export default function HomePage() {
                       {formatTime(sub.start)}
                     </a>
                     <p className='flex-1 text-[15px] leading-[1.7] text-stone-800'>
-                      {query.trim()
-                        ? highlight(sub.text, query)
-                        : sub.text}
+                      {query.trim() ? highlight(sub.text, query) : sub.text}
                     </p>
                   </li>
                 ))}
@@ -533,7 +527,6 @@ export default function HomePage() {
             </section>
           </article>
         )}
-
       </div>
 
       {/* Footer pinned to the bottom of the viewport on short content, naturally follows on long content */}
@@ -601,7 +594,7 @@ function highlight(text: string, query: string): React.ReactNode {
       </mark>
     ) : (
       <span key={i}>{part}</span>
-    )
+    ),
   );
 }
 
