@@ -1,0 +1,21 @@
+{
+  "name": "youtube-caption-extractor-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node api.cjs",
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "wrangler deploy",
+    "cf:dry-run": "wrangler deploy --dry-run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.2",
+    "hono": "^4.12.19",
+    "undici": "^8.3.0",
+    "youtube-caption-extractor": "^1.10.1"
+  },
+  "devDependencies": {
+    "@cloudflare/containers": "^0.0.28",
+    "wrangler": "^4.34.0"
+  }
+}

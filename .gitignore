@@ -3,11 +3,15 @@ dist
 
 *.log
 .DS_Store
+.env*.local
 
 
 /sample/.next/
 /sample/out/
 /sample/build/
 /sample/node_modules/
+/sample/server/node_modules/
+/sample/server/.wrangler/
+/sample/server/.dev.vars*
 
 /docs

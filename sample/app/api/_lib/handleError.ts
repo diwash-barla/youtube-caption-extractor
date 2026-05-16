@@ -21,7 +21,7 @@ export function handleApiError(error: unknown): NextResponse {
       {
         code: 'youtube_blocked_datacenter_ip',
         message:
-          'YouTube is blocking this server. Most cloud hosts (Vercel, AWS Lambda, Cloudflare Workers) share IP ranges that YouTube gates with a bot challenge — no client-side fix can bypass it. The library works on residential IPs: run the demo locally to see it in action, or wire up a residential proxy via the `fetch` option.',
+          'YouTube is blocking this server egress. Cloud/container hosts often use shared datacenter IP ranges that YouTube gates with a bot challenge. If this persists on Cloudflare Containers, route outbound YouTube requests through the library `fetch` option using a trusted proxy.',
         debug: message,
       },
       { status: 503 }

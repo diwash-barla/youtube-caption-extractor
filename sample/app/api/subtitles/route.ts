@@ -1,5 +1,6 @@
 import { getSubtitles } from 'youtube-caption-extractor';
 import { NextResponse, type NextRequest } from 'next/server';
+import { proxyCaptionApi } from '../_lib/captionApiProxy';
 import { handleApiError } from '../_lib/handleError';
 
 export async function GET(request: NextRequest) {
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     );
   }
+
+  const proxied = await proxyCaptionApi('/api/subtitles', searchParams);
+  if (proxied) return proxied;
 
   try {
     const subtitles = await getSubtitles({ videoID, lang });

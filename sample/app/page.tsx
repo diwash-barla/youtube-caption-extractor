@@ -86,7 +86,17 @@ const LANGUAGES = [
   ['zh', 'Chinese'],
 ] as const;
 
-const SAMPLE_IDS = ['7GeFt8suV8E', 'jNQXAC9IVRw'];
+const SAMPLE_IDS = [
+  '7GeFt8suV8E',
+  'jNQXAC9IVRw',
+  'D37Ijn2o5U0',
+  'g9JIUM0MHgQ',
+  '6BB6exR8Zd8',
+];
+function apiUrl(path: string, params: URLSearchParams): string {
+  const query = params.toString();
+  return `${path}${query ? `?${query}` : ''}`;
+}
 
 export default function HomePage() {
   const [input, setInput] = useState('');
@@ -150,9 +160,10 @@ export default function HomePage() {
     setError(null);
     setQuery('');
     try {
+      const params = new URLSearchParams({ videoID: id, lang });
       const [subsRes, detailsRes] = await Promise.all([
-        fetch(`/api/subtitles?videoID=${id}&lang=${lang}`),
-        fetch(`/api/videoDetails?videoID=${id}&lang=${lang}`),
+        fetch(apiUrl('/api/subtitles', params)),
+        fetch(apiUrl('/api/videoDetails', params)),
       ]);
       if (!subsRes.ok) {
         setError(await readApiError(subsRes));

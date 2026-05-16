@@ -1,8 +1,15 @@
 # youtube-caption-extractor
 
-A small, dependency-light library that extracts the transcript (and basic
-metadata) from any public YouTube video. Works with both manual captions and
-YouTube's auto-generated subtitles, in any language the video has tracks for.
+Extract readable transcripts and basic metadata from public YouTube videos with
+one small TypeScript library. It works with manual captions and YouTube's
+auto-generated captions, and it can run in Node.js, serverless functions, edge
+runtimes, or a containerized API.
+
+- **Simple API** — `getSubtitles()` and `getVideoDetails()`
+- **Typed output** — ships first-party TypeScript definitions
+- **Runtime-friendly** — uses global `fetch`, with an optional custom transport
+- **Production-aware** — supports retries, caching, and proxy/custom egress
+- **Demo included** — a Next.js sample app plus a Cloudflare Container API
 
 ```ts
 import { getSubtitles } from 'youtube-caption-extractor';
@@ -16,16 +23,45 @@ const subtitles = await getSubtitles({ videoID: '7GeFt8suV8E', lang: 'en' });
 //   ]
 ```
 
+## Try it quickly
+
+```sh
+npm install youtube-caption-extractor
+```
+
+```ts
+import { getVideoDetails } from 'youtube-caption-extractor';
+
+const video = await getVideoDetails({
+  videoID: '7GeFt8suV8E',
+  lang: 'en',
+});
+
+console.log(video.title);
+console.log(video.subtitles.map((s) => s.text).join('\n'));
+```
+
+Want to click around first? Try the hosted demo:
+[youtube-caption-extractor.vercel.app](https://youtube-caption-extractor.vercel.app/).
+
+Want a full app example? See [`sample/`](./sample), which includes:
+
+- A polished Next.js UI
+- Local API testing with your machine's network egress
+- A Dockerized Hono API deployed through Cloudflare Containers
+- A server-side token-protected proxy so the container API is not publicly open
+
 ## Installation
 
 ```sh
 npm install youtube-caption-extractor
 ```
 
-Requires **Node.js ≥ 18** (uses the global `fetch` API). Works in Node.js,
-Bun, Deno, Cloudflare Workers, and any other modern JavaScript runtime that
-provides `fetch`. See [Deployment notes](#deployment-notes) for tips on
-keeping calls reliable from your runtime of choice.
+Requires **Node.js ≥ 18** when running on Node.js because the library uses the
+global `fetch` API. It also works in Bun, Deno, Cloudflare Workers, and other
+modern JavaScript runtimes that provide `fetch`. See
+[Deployment notes](#deployment-notes) for tips on keeping calls reliable from
+your runtime of choice.
 
 ## API
 
@@ -132,7 +168,35 @@ try {
 
 ## Deployment notes
 
-The library calls YouTube directly, so real-world reliability can depend on the network egress of your deployment. Local development and self-hosted setups tend to work out of the box. Some serverless and edge environments share IP ranges that see broader traffic patterns and may occasionally rate-limit, so for production workloads it's worth combining the patterns below.
+The library calls YouTube directly, so reliability depends partly on the network
+egress of the process making the request.
+
+Local development and self-hosted servers tend to work out of the box. Shared
+serverless, container, and edge IP ranges can sometimes be rate-limited or gated
+by YouTube's bot checks. That is not a library API issue; it is an egress
+reputation issue. For production, use the patterns below.
+
+### Recommended app architecture
+
+Keep YouTube extraction server-side. Do not call YouTube directly from browser
+code.
+
+```txt
+Browser → your app API route → youtube-caption-extractor → YouTube
+```
+
+If you use a separate API service, protect it with a server-side token:
+
+```txt
+Browser → your app API route → token-protected caption API → YouTube
+```
+
+The included [`sample/`](./sample) demonstrates this pattern with:
+
+- Next.js API routes as the public browser-facing API
+- A Cloudflare Worker that rejects requests without `Authorization: Bearer <token>`
+- A Cloudflare Container running a Hono/Node API
+- `CAPTION_API_TOKEN` kept server-side only, never in `NEXT_PUBLIC_*`
 
 ### Building resilient calls
 
@@ -190,6 +254,17 @@ Common uses for a custom `fetch`:
 - **Caching layers** — wrap the global fetch with an LRU or in-memory cache
 - **Authenticated proxies** — add `Authorization` headers via a wrapper
 - **Regional routing** — direct outbound traffic through a specific region or provider
+
+### Local vs hosted behavior
+
+If extraction works locally but fails in a hosted environment with a message like
+`LOGIN_REQUIRED` or "Sign in to confirm you're not a bot", the hosted provider's
+egress IP is likely being challenged by YouTube. Your options are:
+
+1. Run the extraction API somewhere with reliable egress for your workload.
+2. Use the `fetch` option to route outbound YouTube requests through a trusted proxy.
+3. Cache successful results aggressively so fewer requests reach YouTube.
+4. Treat these failures as transient and retry with backoff where appropriate.
 
 ## Usage examples
 

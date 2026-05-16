@@ -4,7 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "api:dev": "npm --prefix server run dev",
     "build": "next build",
+    "cf:dev": "npm --prefix server run cf:dev",
+    "cf:deploy": "npm --prefix server run cf:deploy",
     "start": "next start",
     "lint": "next lint"
   },

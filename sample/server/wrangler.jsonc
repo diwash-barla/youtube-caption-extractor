@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "youtube-caption-extractor-api",
+  "main": "worker.js",
+  "compatibility_date": "2026-05-16",
+  "vars": {
+    "API_INSTANCE_COUNT": "2",
+    "CONTAINER_VERSION": "server-v1",
+    "CACHE_TTL_SECONDS": "21600",
+    "ALLOWED_ORIGINS": "*"
+  },
+  "containers": [
+    {
+      "class_name": "CaptionApiContainer",
+      "image": "./Dockerfile",
+      "instance_type": "lite",
+      "max_instances": 4
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CAPTION_API",
+        "class_name": "CaptionApiContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CaptionApiContainer"]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
