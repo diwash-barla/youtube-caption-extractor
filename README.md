@@ -1,6 +1,6 @@
 <div align="center">
   <h1>youtube-caption-extractor</h1>
-  <p><strong>Turn public YouTube videos into clean, timestamped transcripts for search, RAG, and slide ready notes.</strong></p>
+  <p><strong>Turn public YouTube videos into clean, timestamped transcripts.</strong></p>
   <p>
     Extract YouTube captions, subtitles, auto-generated transcripts, and video metadata
     with a tiny TypeScript library: ~10.8 kB packed, ~31.1 kB unpacked.
