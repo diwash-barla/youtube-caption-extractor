@@ -377,6 +377,13 @@ async function transcript(opts: Options): Promise<Subtitle[]> {
 
 ## Changelog
 
+### v1.10.2
+
+- Added a production-ready sample API path using a Dockerized Hono server on Cloudflare Containers.
+- Added server-side token protection for the sample Cloudflare Worker API.
+- Updated the sample app so browser requests go through Next.js API routes instead of exposing API secrets client-side.
+- Refreshed README quickstart and deployment guidance to make local testing, hosted demos, and production egress tradeoffs clearer.
+
 ### v1.10.1
 
 - **Streamlined the internal client fallback chain.** Removed an outdated client that was no longer contributing successful extractions, and reordered the remaining clients with the most reliable one first.
