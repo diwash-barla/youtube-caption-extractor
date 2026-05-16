@@ -1,7 +1,7 @@
 {
   "name": "youtube-caption-extractor",
   "version": "1.10.2",
-  "description": "A simple and efficient package to scrape and parse captions (subtitles) from YouTube videos, supporting both user-submitted and auto-generated captions with language options.",
+  "description": "Extract clean, timestamped YouTube captions, subtitles, transcripts, and video metadata for AI summaries, RAG, search, and slide-ready workflows.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -17,13 +17,32 @@
   },
   "keywords": [
     "youtube",
+    "youtube-captions",
+    "youtube-subtitles",
+    "youtube-transcript",
     "captions",
     "subtitles",
+    "transcript",
+    "transcripts",
+    "caption-extractor",
+    "subtitle-extractor",
+    "transcript-extractor",
+    "video-transcript",
+    "timestamped-transcript",
+    "video-metadata",
+    "youtube-metadata",
+    "slide-ready",
+    "slides",
+    "presentation-ready",
+    "research-notes",
+    "rag",
+    "llm",
+    "ai",
+    "summarization",
     "scraper",
     "extract",
     "parser",
-    "video",
-    "transcript"
+    "video"
   ],
   "author": {
     "name": "Himanshu Gupta",

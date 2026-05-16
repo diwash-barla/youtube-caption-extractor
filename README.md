@@ -1,15 +1,43 @@
-# youtube-caption-extractor
+<div align="center">
+  <h1>youtube-caption-extractor</h1>
+  <p><strong>Turn public YouTube videos into clean, timestamped transcripts for search, RAG, and slide ready notes.</strong></p>
+  <p>
+    Extract YouTube captions, subtitles, auto-generated transcripts, and video metadata
+    with a tiny TypeScript library: ~10.8 kB packed, ~31.1 kB unpacked.
+  </p>
+  <p>
+    <a href="https://www.npmjs.com/package/youtube-caption-extractor"><img alt="npm version" src="https://img.shields.io/npm/v/youtube-caption-extractor?color=cb3837"></a>
+    <a href="https://www.npmjs.com/package/youtube-caption-extractor"><img alt="npm downloads" src="https://img.shields.io/npm/dm/youtube-caption-extractor"></a>
+    <a href="./LICENSE"><img alt="license" src="https://img.shields.io/npm/l/youtube-caption-extractor"></a>
+    <a href="https://www.typescriptlang.org/"><img alt="TypeScript ready" src="https://img.shields.io/badge/TypeScript-ready-3178c6"></a>
+    <a href="https://nodejs.org/"><img alt="Node.js 18+" src="https://img.shields.io/badge/Node.js-18%2B-43853d"></a>
+  </p>
+  <p>
+    <a href="#try-it-quickly">Quickstart</a>
+    · <a href="https://youtube-caption-extractor.vercel.app/">Live demo</a>
+    · <a href="./sample">Sample app</a>
+    · <a href="#api">API</a>
+    · <a href="#deployment-notes">Deployment notes</a>
+  </p>
+</div>
 
-Extract readable transcripts and basic metadata from public YouTube videos with
-one small TypeScript library. It works with manual captions and YouTube's
-auto-generated captions, and it can run in Node.js, serverless functions, edge
-runtimes, or a containerized API.
+---
 
-- **Simple API** — `getSubtitles()` and `getVideoDetails()`
-- **Typed output** — ships first-party TypeScript definitions
-- **Runtime-friendly** — uses global `fetch`, with an optional custom transport
-- **Production-aware** — supports retries, caching, and proxy/custom egress
-- **Demo included** — a Next.js sample app plus a Cloudflare Container API
+## Why use it?
+
+- **One-call transcript extraction** — `getSubtitles()` returns timestamped segments ready for search, summarization, indexing, RAG, slide ready research notes, or export.
+- **Metadata included** — `getVideoDetails()` returns title, description, and captions in one response.
+- **Manual + auto captions** — prefers exact language matches, then gracefully falls back to available tracks.
+- **Tiny install** — ~10.8 kB packed on npm, with only two runtime dependencies.
+- **Runtime-friendly** — uses global `fetch`, with an optional custom transport for retries, caching, regional routing, or proxies.
+- **Production-aware sample** — includes a Next.js demo plus a token-protected Cloudflare Container API.
+
+## Built for
+
+- YouTube caption extraction, subtitle extraction, and timestamped transcript data.
+- AI summaries, search indexes, RAG pipelines, and agent workflows that need clean video text.
+- Slide ready notes, presentation research, and content workflows built from public YouTube videos.
+- Lightweight video metadata enrichment without pulling in a large SDK.
 
 ```ts
 import { getSubtitles } from 'youtube-caption-extractor';
@@ -71,11 +99,11 @@ The library exports two functions and three types.
 
 Returns the caption track as an array of timed segments.
 
-| Param | Type | Default | Notes |
-|---|---|---|---|
-| `videoID` | `string` | (required) | The 11-character YouTube video ID, e.g. `7GeFt8suV8E`. Not the full URL. |
-| `lang` | `string` | `'en'` | ISO language code (`'en'`, `'es'`, `'fr'`, `'ja'`, …). Manual captions are preferred over auto-generated, and an exact match is preferred over a partial match. |
-| `fetch` | `typeof fetch` | global `fetch` | Custom fetch implementation. Useful for adding caching, custom retries, or routing through a proxy. See [Customizing the transport](#customizing-the-transport). |
+| Param     | Type           | Default        | Notes                                                                                                                                                            |
+| --------- | -------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `videoID` | `string`       | (required)     | The 11-character YouTube video ID, e.g. `7GeFt8suV8E`. Not the full URL.                                                                                         |
+| `lang`    | `string`       | `'en'`         | ISO language code (`'en'`, `'es'`, `'fr'`, `'ja'`, …). Manual captions are preferred over auto-generated, and an exact match is preferred over a partial match.  |
+| `fetch`   | `typeof fetch` | global `fetch` | Custom fetch implementation. Useful for adding caching, custom retries, or routing through a proxy. See [Customizing the transport](#customizing-the-transport). |
 
 Resolves to `Subtitle[]`. Returns an empty array if the video plays but has no caption track in the requested language. **Throws** if the video is unavailable on any extraction path (see [Error handling](#error-handling)).
 
@@ -98,9 +126,9 @@ If subtitles fail to extract but the video metadata is available, `subtitles` wi
 
 ```ts
 interface Subtitle {
-  start: string;        // Segment start time, seconds
-  dur: string;          // Segment duration, seconds
-  text: string;         // Decoded text content
+  start: string; // Segment start time, seconds
+  dur: string; // Segment duration, seconds
+  text: string; // Decoded text content
 }
 
 interface VideoDetails {
@@ -119,7 +147,11 @@ interface Options {
 All three are exported by name and can be imported directly:
 
 ```ts
-import type { Subtitle, VideoDetails, Options } from 'youtube-caption-extractor';
+import type {
+  Subtitle,
+  VideoDetails,
+  Options,
+} from 'youtube-caption-extractor';
 ```
 
 ## Languages
@@ -132,7 +164,7 @@ The `lang` argument is a hint, not a strict filter. Track selection precedence:
 4. **Any track whose `vssId` contains the requested code** (partial match)
 5. **The first available track** as a final fallback
 
-If you pass `lang: 'en'` and the video only has Spanish manual captions, you'll get those — the library prefers *some* output over none. If you pass a code that doesn't exist on the video, you'll typically get the video's primary language track. To check whether you got what you asked for, inspect the first segment's text or compare against `VideoDetails.title` / `description`.
+If you pass `lang: 'en'` and the video only has Spanish manual captions, you'll get those — the library prefers _some_ output over none. If you pass a code that doesn't exist on the video, you'll typically get the video's primary language track. To check whether you got what you asked for, inspect the first segment's text or compare against `VideoDetails.title` / `description`.
 
 ## Error handling
 
@@ -208,7 +240,7 @@ import { getSubtitles, type Subtitle } from 'youtube-caption-extractor';
 async function getSubtitlesWithRetry(
   videoID: string,
   lang = 'en',
-  maxAttempts = 3
+  maxAttempts = 3,
 ): Promise<Subtitle[]> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -331,10 +363,7 @@ export default {
       const subtitles = await getSubtitles({ videoID, lang: 'en' });
       return Response.json({ subtitles });
     } catch (err) {
-      return Response.json(
-        { error: (err as Error).message },
-        { status: 500 },
-      );
+      return Response.json({ error: (err as Error).message }, { status: 500 });
     }
   },
 };
