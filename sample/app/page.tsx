@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 type Subtitle = { start: string; dur: string; text: string };
 type VideoDetails = { title?: string; description?: string };
+type VideoDetailsPayload = VideoDetails & { subtitles?: Subtitle[] };
 type ErrorState = { message: string; code?: string };
 
 async function readApiError(res: Response): Promise<ErrorState> {
@@ -161,27 +162,21 @@ export default function HomePage() {
     setQuery('');
     try {
       const params = new URLSearchParams({ videoID: id, lang });
-      const [subsRes, detailsRes] = await Promise.all([
-        fetch(apiUrl('/api/subtitles', params)),
-        fetch(apiUrl('/api/videoDetails', params)),
-      ]);
-      if (!subsRes.ok) {
-        setError(await readApiError(subsRes));
-        setSubtitles([]);
-        setVideoDetails({});
-        return;
-      }
+      const detailsRes = await fetch(apiUrl('/api/videoDetails', params));
+
       if (!detailsRes.ok) {
         setError(await readApiError(detailsRes));
         setSubtitles([]);
         setVideoDetails({});
         return;
       }
-      const subsData = await subsRes.json();
+
       const detailsData = await detailsRes.json();
-      const subs: Subtitle[] = subsData.subtitles ?? [];
+      const details: VideoDetailsPayload = detailsData.videoDetails ?? {};
+      const { subtitles: subs = [], ...metadata } = details;
+
       setSubtitles(subs);
-      setVideoDetails(detailsData.videoDetails ?? {});
+      setVideoDetails(metadata);
       setVideoId(id);
       if (subs.length === 0) {
         setError({
@@ -402,7 +397,7 @@ export default function HomePage() {
               </a>
               <div className='flex-1 min-w-0'>
                 <h2 className='font-serif text-2xl leading-[1.15] tracking-[-0.01em] text-stone-900 text-balance'>
-                  {videoDetails.title}
+                  {videoDetails.title || `youtu.be/${videoId}`}
                 </h2>
                 <a
                   href={`https://youtu.be/${videoId}`}
