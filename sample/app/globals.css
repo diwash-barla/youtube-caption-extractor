@@ -49,13 +49,13 @@ html, body {
   text-wrap: balance;
 }
 
-/* Highlighter-pen effect — wraps only the text per line, sits as a stripe
-   across the lower portion of the characters. Defined as plain CSS rather
-   than @utility because Tailwind 4 was tree-shaking it out. */
+/* Highlighter-pen effect: wraps only the text per line, with the color capped
+   to the visible ascender height instead of the heading's larger line box. */
 .highlight {
-  /* Highlight fully covers the text. Small transparent bands at top and
-     bottom keep the stripes from butting against adjacent lines on wrap. */
-  background: linear-gradient(180deg, transparent 15%, #fde68a 15%, #fde68a 94%, transparent 94%);
+  background-image: linear-gradient(#fde68a, #fde68a);
+  background-repeat: no-repeat;
+  background-position: 0 50%;
+  background-size: 100% 0.72em;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
   padding: 0 0.08em;

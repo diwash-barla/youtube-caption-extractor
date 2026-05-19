@@ -88,11 +88,11 @@ const LANGUAGES = [
 ] as const;
 
 const SAMPLE_IDS = [
-  '7GeFt8suV8E',
-  'jNQXAC9IVRw',
+  '0Gb1z-2SjHY',
   'D37Ijn2o5U0',
   'g9JIUM0MHgQ',
   '6BB6exR8Zd8',
+  '55pTFVoclvE',
 ];
 function apiUrl(path: string, params: URLSearchParams): string {
   const query = params.toString();
@@ -211,14 +211,14 @@ export default function HomePage() {
 
         {/* Headline */}
         <h1 className='mt-3 font-serif text-[44px] sm:text-[56px] leading-[1.15] tracking-[-0.02em] text-stone-900'>
-          <span className='highlight'>Get the transcript</span>
+          <span className='highlight'>Get clean transcript</span>
           <br />
           <span className='highlight italic font-light'>
             for any{' '}
             <span className='not-italic font-normal tracking-[-0.01em]'>
               YouTube
             </span>{' '}
-            video.
+            video
           </span>
         </h1>
 
@@ -543,7 +543,7 @@ export default function HomePage() {
           >
             github
           </a>
-          <span className='ml-auto font-mono text-stone-400'>v1.10.0</span>
+          <span className='ml-auto font-mono text-stone-400'>v1.10.2</span>
         </div>
       </footer>
     </main>
