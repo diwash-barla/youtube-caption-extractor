@@ -1,10 +1,8 @@
-name: Live YouTube canary
+name: Production API canary
 
-# Best-effort nightly probe against real YouTube. NOTE: YouTube blocks most
-# datacenter IPs (including GitHub Actions) with bot challenges, so this
-# job is *expected* to fail intermittently from CI. It exists to surface
-# the rare days when YouTube changes something AND the GHA IP range is
-# briefly unblocked — in which case we want to know.
+# Best-effort nightly probe against the deployed production API. This checks the
+# real hosted path users hit instead of asking YouTube directly from GitHub
+# Actions, which is commonly blocked by YouTube's bot detection.
 #
 # This workflow does NOT fail the build. It opens / comments on a tracking
 # issue if a run fails, so maintainers can investigate.
@@ -19,46 +17,42 @@ permissions:
   issues: write
 
 jobs:
-  live:
+  prod:
     runs-on: ubuntu-latest
     continue-on-error: true
+    env:
+      CAPTION_API_BASE_URL: https://youtube-caption-extractor.vercel.app
+      CAPTION_API_VIDEO_IDS: 0Gb1z-2SjHY,D37Ijn2o5U0,g9JIUM0MHgQ,6BB6exR8Zd8,55pTFVoclvE
+      CAPTION_API_LANG: en
+      CAPTION_API_ATTEMPTS: 3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run build
 
-      - name: Run live YouTube tests
-        id: live
-        env:
-          YOUTUBE_LIVE: '1'
-        run: npx vitest run --retry=2
+      - name: Check production API
+        id: prod
+        run: node .github/scripts/check-production-api.mjs
 
       - name: Open / update tracking issue on failure
-        if: failure() && steps.live.outcome == 'failure'
+        if: failure() && steps.prod.outcome == 'failure'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          TITLE="Nightly YouTube canary failed"
+          TITLE="Nightly production API canary failed"
           EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
           BODY=$(cat <<EOF
-          The nightly live-network check against YouTube failed.
+          The nightly production API check failed.
 
-          **Most common cause:** YouTube's bot-detection blocked the GitHub
-          Actions runner IP (this happens routinely — datacenter IP ranges
-          are aggressively filtered). The library itself is likely fine for
-          end users on residential IPs.
+          This workflow calls the deployed Vercel app at
+          \`$CAPTION_API_BASE_URL/api/videoDetails\` and validates that it
+          returns non-empty metadata and captions for dashboard sample videos.
 
-          **When to act:** if this issue keeps reopening for many days *and*
-          you can reproduce the failure locally on a residential connection,
-          then YouTube has likely changed something. The fix is to bump
-          \`clientVersion\` values in \`CLIENT_PROFILES\` in
-          [\`src/index.ts\`](../blob/main/src/index.ts) — track recent commits
-          to yt-dlp's youtube extractor for known-good versions.
+          **When to act:** if this issue keeps reopening, investigate the
+          deployed API path first: Vercel environment variables, proxy routing,
+          runtime errors, rate limits, or upstream YouTube/proxy behavior.
 
           **Failed run:** $RUN_URL
           EOF
