@@ -49,6 +49,10 @@ html, body {
   text-wrap: balance;
 }
 
+@utility wrap-anywhere {
+  overflow-wrap: anywhere;
+}
+
 /* Highlighter-pen effect: wraps only the text per line, with the color capped
    to the visible ascender height instead of the heading's larger line box. */
 .highlight {

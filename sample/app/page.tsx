@@ -203,14 +203,14 @@ export default function HomePage() {
 
   return (
     <main className='min-h-screen flex flex-col'>
-      <div className='mx-auto w-full max-w-2xl px-6 sm:px-8 pt-16 sm:pt-24 pb-16 flex-1'>
+      <div className='mx-auto w-full max-w-2xl px-5 sm:px-8 pt-14 sm:pt-24 pb-16 flex-1'>
         {/* Eyebrow */}
         <div className='font-mono text-[10px] uppercase tracking-[0.22em] text-stone-500'>
           youtube-caption-extractor
         </div>
 
         {/* Headline */}
-        <h1 className='mt-3 font-serif text-[44px] sm:text-[56px] leading-[1.15] tracking-[-0.02em] text-stone-900'>
+        <h1 className='mt-3 font-serif text-[40px] sm:text-[56px] leading-[1.15] tracking-[-0.02em] text-stone-900'>
           <span className='highlight'>Get clean transcript</span>
           <br />
           <span className='highlight italic font-light'>
@@ -297,23 +297,28 @@ export default function HomePage() {
             </label>
 
             {!hasResults && !isFetching && (
-              <div className='inline-flex items-baseline gap-3'>
-                <span>or try</span>
-                {SAMPLE_IDS.map((id, idx) => (
-                  <span key={id} className='inline-flex items-baseline gap-3'>
-                    <button
-                      type='button'
+              <>
+                <div className='flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-2 sm:hidden'>
+                  <span className='shrink-0'>or try</span>
+                  {SAMPLE_IDS.slice(0, 2).map((id) => (
+                    <SampleIdButton
+                      key={id}
+                      id={id}
                       onClick={() => fetchData(id)}
-                      className='font-mono text-stone-700 hover:text-stone-900 underline decoration-stone-300 hover:decoration-stone-900 decoration-1 underline-offset-[3px] transition-colors'
-                    >
-                      {id}
-                    </button>
-                    {idx < SAMPLE_IDS.length - 1 && (
-                      <span className='text-stone-300'>·</span>
-                    )}
-                  </span>
-                ))}
-              </div>
+                    />
+                  ))}
+                </div>
+                <div className='hidden min-w-0 flex-wrap items-baseline justify-end gap-x-3 gap-y-2 sm:flex'>
+                  <span className='shrink-0'>or try</span>
+                  {SAMPLE_IDS.map((id) => (
+                    <SampleIdButton
+                      key={id}
+                      id={id}
+                      onClick={() => fetchData(id)}
+                    />
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </form>
@@ -325,7 +330,7 @@ export default function HomePage() {
               <div className='font-mono text-[10px] uppercase tracking-[0.22em] text-amber-700 mb-2'>
                 Live demo limitation
               </div>
-              <p className='text-sm text-stone-700 leading-relaxed'>
+              <p className='text-sm text-stone-700 leading-relaxed wrap-anywhere'>
                 {error.message}
               </p>
               <div className='mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs'>
@@ -348,7 +353,7 @@ export default function HomePage() {
               </div>
             </aside>
           ) : (
-            <p className='mt-6 text-sm text-stone-600 border-l-2 border-stone-300 pl-3'>
+            <p className='mt-6 text-sm text-stone-600 border-l-2 border-stone-300 pl-3 wrap-anywhere'>
               {error.message}
             </p>
           ))}
@@ -382,12 +387,12 @@ export default function HomePage() {
         {hasResults && (
           <article className='mt-16'>
             {/* Video header */}
-            <header className='flex gap-5 mb-10'>
+            <header className='flex flex-col gap-4 sm:flex-row sm:gap-5 mb-10'>
               <a
                 href={`https://youtu.be/${videoId}`}
                 target='_blank'
                 rel='noopener noreferrer'
-                className='shrink-0 group block w-32 aspect-video rounded overflow-hidden bg-stone-100 border border-stone-200'
+                className='group block w-full aspect-video rounded overflow-hidden bg-stone-100 border border-stone-200 sm:w-32 sm:shrink-0'
               >
                 <img
                   src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
@@ -396,16 +401,16 @@ export default function HomePage() {
                 />
               </a>
               <div className='flex-1 min-w-0'>
-                <h2 className='font-serif text-2xl leading-[1.15] tracking-[-0.01em] text-stone-900 text-balance'>
+                <h2 className='font-serif text-2xl leading-[1.15] tracking-[-0.01em] text-stone-900 text-balance wrap-anywhere'>
                   {videoDetails.title || `youtu.be/${videoId}`}
                 </h2>
                 <a
                   href={`https://youtu.be/${videoId}`}
                   target='_blank'
                   rel='noopener noreferrer'
-                  className='mt-2 inline-flex items-center gap-1 text-xs font-mono text-stone-500 hover:text-stone-900 transition-colors'
+                  className='mt-2 inline-flex max-w-full items-center gap-1 text-xs font-mono text-stone-500 hover:text-stone-900 transition-colors'
                 >
-                  <span>youtu.be/{videoId}</span>
+                  <span className='min-w-0 truncate'>youtu.be/{videoId}</span>
                   <span aria-hidden='true'>↗</span>
                 </a>
               </div>
@@ -414,7 +419,7 @@ export default function HomePage() {
             <hr className='border-stone-200' />
 
             {/* Stats */}
-            <dl className='mt-6 flex items-baseline gap-8 text-sm'>
+            <dl className='mt-6 grid grid-cols-2 gap-x-8 gap-y-5 text-sm sm:flex sm:items-baseline sm:gap-8'>
               <Stat label='segments' value={subtitles.length.toString()} />
               <Stat label='length' value={formatTime(totalDuration)} />
               <Stat label='words' value={wordCount.toLocaleString()} />
@@ -430,7 +435,7 @@ export default function HomePage() {
                     →
                   </span>
                 </summary>
-                <p className='mt-3 text-sm text-stone-600 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto scrollbar-paper pr-2'>
+                <p className='mt-3 text-sm text-stone-600 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto scrollbar-paper pr-2 wrap-anywhere'>
                   {videoDetails.description}
                 </p>
               </details>
@@ -438,7 +443,7 @@ export default function HomePage() {
 
             {/* Transcript section */}
             <section className='mt-14'>
-              <div className='flex items-baseline justify-between gap-4 mb-5'>
+              <div className='flex flex-wrap items-baseline justify-between gap-4 mb-5'>
                 <h3 className='font-serif text-2xl tracking-[-0.01em] text-stone-900'>
                   Transcript
                 </h3>
@@ -501,19 +506,19 @@ export default function HomePage() {
               {/* Segments */}
               <ol className='space-y-2'>
                 {filteredSubs.map((sub, i) => (
-                  <li key={`${sub.start}-${i}`} className='flex gap-5 group'>
+                  <li key={`${sub.start}-${i}`} className='flex gap-4 sm:gap-5 group'>
                     <a
                       href={`https://youtu.be/${videoId}?t=${Math.floor(
                         Number(sub.start),
                       )}s`}
                       target='_blank'
                       rel='noopener noreferrer'
-                      className='shrink-0 w-12 pt-[3px] font-mono text-[11px] tabular-nums text-stone-400 hover:text-stone-900 transition-colors text-right'
+                      className='shrink-0 w-10 sm:w-12 pt-[3px] font-mono text-[11px] tabular-nums text-stone-400 hover:text-stone-900 transition-colors text-right'
                       title='Open at this moment'
                     >
                       {formatTime(sub.start)}
                     </a>
-                    <p className='flex-1 text-[15px] leading-[1.7] text-stone-800'>
+                    <p className='min-w-0 flex-1 text-[15px] leading-[1.7] text-stone-800 wrap-anywhere'>
                       {query.trim() ? highlight(sub.text, query) : sub.text}
                     </p>
                   </li>
@@ -526,7 +531,7 @@ export default function HomePage() {
 
       {/* Footer pinned to the bottom of the viewport on short content, naturally follows on long content */}
       <footer className='border-t border-stone-200'>
-        <div className='mx-auto w-full max-w-2xl px-6 sm:px-8 py-6 text-xs text-stone-500 flex flex-wrap items-baseline gap-x-6 gap-y-2'>
+        <div className='mx-auto w-full max-w-2xl px-5 sm:px-8 py-6 text-xs text-stone-500 flex flex-wrap items-baseline gap-x-6 gap-y-2'>
           <a
             href='https://www.npmjs.com/package/youtube-caption-extractor'
             target='_blank'
@@ -562,6 +567,24 @@ function Spinner() {
     >
       <path d='M12 3a9 9 0 1 0 9 9' className='opacity-90' />
     </svg>
+  );
+}
+
+function SampleIdButton({
+  id,
+  onClick,
+}: {
+  id: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type='button'
+      onClick={onClick}
+      className='font-mono text-stone-700 hover:text-stone-900 underline decoration-stone-300 hover:decoration-stone-900 decoration-1 underline-offset-[3px] transition-colors'
+    >
+      {id}
+    </button>
   );
 }
 
